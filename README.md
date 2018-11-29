@@ -1,4 +1,7 @@
 # reregexp
+
+[![npm version](https://badge.fury.io/js/reregexp.svg)](https://badge.fury.io/js/reregexp)&nbsp;&nbsp;[![Build Status](https://travis-ci.org/suchjs/reregexp.svg?branch=master)](https://travis-ci.org/suchjs/reregexp)
+
 reverse analysis regexp,parse to ast,get a string match it.
 
 ## How to use
