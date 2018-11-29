@@ -1,0 +1,15 @@
+# dir
+/src/
+/__tests__/
+/dist/
+/node_modules/
+# files
+browser.ts
+tslint.json
+yarn.lock
+.DS_Store
+.vscode
+.travis.yml
+package-lock.json
+webpack.config.js
+jest.config.json

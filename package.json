@@ -1,0 +1,45 @@
+{
+  "name": "reregexp",
+  "version": "0.0.1",
+  "description": "reverse analysis regexp,parse to ast,get a string match it.",
+  "main": "./lib/index.js",
+  "typings": "./lib/index.d.ts",
+  "author": "jxz_211",
+  "keywords": [
+    "regexp",
+    "reverse analysis",
+    "regexp parser",
+    "regexp to string"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^22.2.3",
+    "@types/node": "^10.12.10",
+    "coveralls": "^3.0.2",
+    "jest": "^22.4.3",
+    "ts-jest": "^23.10.4",
+    "ts-loader": "^5.3.0",
+    "ts-node": "^7.0.1",
+    "tsconfig-paths": "^3.6.0",
+    "tslint": "^5.10.0",
+    "typescript": "^3.1.6",
+    "webpack": "^4.26.0",
+    "webpack-cli": "^3.1.2"
+  },
+  "scripts": {
+    "start": "tsc && node lib/index.js",
+    "test": "jest",
+    "local": "ts-node -r tsconfig-paths/register src/local/test.ts",
+    "build:browser": "webpack --progress --mode='production'",
+    "coverage": "jest --coverage --coverageReporters=text-lcov | coveralls",
+    "prepublish": "tsc && npm run build:browser"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/suchjs/reregexp"
+  },
+  "bugs": {
+    "url": "https://github.com/suchjs/reregexp/issues"
+  }
+}

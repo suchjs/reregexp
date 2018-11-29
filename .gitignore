@@ -1,0 +1,9 @@
+# node modules
+node_modules
+# vscode
+.vscode/*
+# build 
+/src/local
+.DS_Store*
+yarn.lock
+package-lock.json
