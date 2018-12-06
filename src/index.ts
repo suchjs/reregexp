@@ -14,8 +14,8 @@ const getLastItem = (arr: any[]) => {
 };
 //
 export interface NormalObject {
-  [index:string]:any;
-};
+  [index: string]: any;
+}
 export type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's';
 export type FlagsHash = {
   [key in Flag]?: boolean;
@@ -218,6 +218,7 @@ export const regexpRule = new RegExp(`^\/((?:\\\\.|[^\\\\](?!\/)|[^\\\\])+?)\/([
  * @export
  * @class Parser
  */
+// tslint:disable-next-line:max-classes-per-file
 export default class Parser {
   public readonly context: string = '';
   public readonly flags: Flag[] = [];
@@ -227,6 +228,7 @@ export default class Parser {
   private flagsHash: FlagsHash = {};
   private totalFlagBinary: number = 0;
   private rootQueues: RegexpPart[] = [];
+  private hasLookaround: boolean = false;
   constructor(public readonly rule: string, private config: ParserConf = {}) {
     if(regexpRule.test(rule)) {
       this.rule = rule;
@@ -245,6 +247,9 @@ export default class Parser {
   }
   // build
   public build(): string | never {
+    if(this.hasLookaround) {
+      throw new Error('the build method does not support lookarounds.');
+    }
     const { rootQueues } = this;
     const conf: BuildConfData = {
       ...this.config,
@@ -277,10 +282,13 @@ export default class Parser {
     const j: number = context.length;
     const queues: RegexpPart[] = [new RegexpBegin()];
     const groups: RegexpGroup[] = [];
+    const lookarounds: RegexpLookaround[] = [];
     const captureGroups: RegexpGroup[] = [];
     const refGroups: {[index: string]: RegexpGroup | null } = {};
-    const captureRule = /^(\?(?:<(.+?)>|<=|<!|=|!|:))/;
+    const captureRule = /^(\?(?:<(.+?)>|:))/;
+    const lookaroundRule = /^(\?(?:<=|<!|=|!))/;
     const hasFlagU = this.hasFlag('u');
+    const braceQueues: string[] = [];
     let groupCaptureIndex: number = 0;
     let curSet = null;
     let curRange = null;
@@ -386,6 +394,7 @@ export default class Parser {
                   }
                 } else {
                   target.ref = null;
+                  target.isEmptyRef = true;
                 }
               }
             }
@@ -396,40 +405,59 @@ export default class Parser {
           break;
         // match group begin "("
         case s.groupBegin:
-          target = new RegexpGroup();
-          if(lastGroup) {
-            target.parent = lastGroup;
-            lastGroup.add(target);
-          }
-          special = new RegexpSpecial('groupBegin');
-          groups.push(target);
-          // get capture info
-          if(captureRule.test(nextAll)) {
-            const { $1: all, $2: captureName } = RegExp;
-            if(all === '?:') {
-              // do nothing, captureIndex = 0 by default
-            } else if(captureName) {
-              // named group
-              target.captureIndex = ++groupCaptureIndex;
-              target.captureName = captureName;
-            } else {
-              throw new Error(`do not use any lookahead\\lookbehind:${all}`);
-            }
-            i += all.length;
+          const isLookaround = lookaroundRule.test(nextAll);
+          let lastLookaround = null;
+          if(isLookaround) {
+            const lookType = RegExp.$1;
+            lastLookaround = getLastItem(lookarounds);
+            target = new RegexpLookaround(lookType);
+            special = new RegexpSpecial('lookaroundBegin');
+            lookarounds.push(target);
+            braceQueues.push('lookaround');
+            this.hasLookaround = true;
+            i += lookType.length;
           } else {
-            target.captureIndex = ++groupCaptureIndex;
+            target = new RegexpGroup();
+            special = new RegexpSpecial('groupBegin');
+            groups.push(target);
+            braceQueues.push('group');
           }
-          if(target.captureIndex > 0) {
-            captureGroups.push(target);
+          const curQueue = lastGroup || lastLookaround;
+          if(curQueue) {
+            target.parent = curQueue;
+            curQueue.add(target);
+          }
+          if(!isLookaround) {
+            target = target as RegexpGroup;
+            // get capture info
+            if(captureRule.test(nextAll)) {
+              const { $1: all, $2: captureName } = RegExp;
+              if(all === '?:') {
+                // do nothing, captureIndex = 0 by default
+              } else {
+                // named group
+                target.captureIndex = ++groupCaptureIndex;
+                target.captureName = captureName;
+              }
+              i += all.length;
+            } else {
+              target.captureIndex = ++groupCaptureIndex;
+            }
+            if(target.captureIndex > 0) {
+              captureGroups.push(target);
+            }
           }
           break;
         // match group end ")"
         case s.groupEnd:
-          const last = groups.pop();
-          if(last) {
-            last.isComplete = true;
-            special = new RegexpSpecial('groupEnd');
-            special.parent = last;
+          if(braceQueues.length) {
+            const curBrace = braceQueues.pop();
+            const last = (curBrace === 'group' ? groups : lookarounds).pop();
+            if(last) {
+              last.isComplete = true;
+              special = new RegexpSpecial(`${curBrace}End`);
+              special.parent = last;
+            }
           } else {
             throw new Error(`unmatched ${char},you mean "\\${char}"?`);
           }
@@ -550,11 +578,12 @@ export default class Parser {
         } else if(curSet && curSet !== cur) {
           cur.parent = curSet;
           curSet.add(cur);
-        } else if(groups.length) {
-          const group = getLastItem(groups);
-          if(group !== cur) {
-            cur.parent = group;
-            group.add(cur);
+        } else if(groups.length || lookarounds.length) {
+          // tslint:disable-next-line:max-line-length
+          const curQueue = getLastItem(braceQueues) === 'group' ? getLastItem(groups) : getLastItem(lookarounds);
+          if(curQueue !== cur) {
+            cur.parent = curQueue;
+            curQueue.add(cur);
           }
         }
       }
@@ -779,6 +808,7 @@ export class RegexpReference extends RegexpPart {
   public readonly type = 'reference';
   public ref: RegexpGroup | null = null;
   public index: number;
+  public isEmptyRef: boolean = false;
   constructor(input: string) {
     super(input);
     this.index = Number(`${input.slice(1)}`);
@@ -799,6 +829,23 @@ export class RegexpSpecial extends RegexpEmpty {
   public readonly type = 'special';
   constructor(public readonly special: string) {
     super();
+  }
+}
+// tslint:disable-next-line:max-classes-per-file
+export class RegexpLookaround extends RegexpEmpty {
+  public readonly type = 'lookaround';
+  public readonly looktype: string;
+  constructor(input: string) {
+    super();
+    this.looktype = input;
+    this.isComplete = false;
+  }
+  public add(target: RegexpPart) {
+    const { queues } = this;
+    queues.push(target);
+  }
+  public getRuleInput() {
+    return '(' + this.looktype + this.buildRuleInputFromQueues() + ')';
   }
 }
 // tslint:disable-next-line:max-classes-per-file
