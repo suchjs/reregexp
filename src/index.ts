@@ -288,7 +288,7 @@ export default class Parser {
     const captureRule = /^(\?(?:<(.+?)>|:))/;
     const lookaroundRule = /^(\?(?:<=|<!|=|!))/;
     const hasFlagU = this.hasFlag('u');
-    const braceQueues: string[] = [];
+    const nestQueues: RegexpPart[] = [];
     let groupCaptureIndex: number = 0;
     let curSet = null;
     let curRange = null;
@@ -305,9 +305,6 @@ export default class Parser {
           curRange = null;
         } else {
           newChar.parent = curSet;
-          if(char === '^' && (curSet as RegexpSet).isSetStart()) {
-            curSet.reverse = true;
-          }
           curSet.add(newChar);
         }
         queues.push(newChar);
@@ -413,15 +410,14 @@ export default class Parser {
             target = new RegexpLookaround(lookType);
             special = new RegexpSpecial('lookaroundBegin');
             lookarounds.push(target);
-            braceQueues.push('lookaround');
             this.hasLookaround = true;
             i += lookType.length;
           } else {
             target = new RegexpGroup();
             special = new RegexpSpecial('groupBegin');
             groups.push(target);
-            braceQueues.push('group');
           }
+          nestQueues.push(target);
           const curQueue = lastGroup || lastLookaround;
           if(curQueue) {
             target.parent = curQueue;
@@ -450,12 +446,15 @@ export default class Parser {
           break;
         // match group end ")"
         case s.groupEnd:
-          if(braceQueues.length) {
-            const curBrace = braceQueues.pop();
-            const last = (curBrace === 'group' ? groups : lookarounds).pop();
+          if(nestQueues.length) {
+            const curNest = nestQueues.pop();
+            if(!curNest || ['group', 'lookaround'].indexOf(curNest.type) < 0) {
+              throw new Error(`unexpected capture end.`);
+            }
+            const last = (curNest.type === 'group' ? groups : lookarounds).pop();
             if(last) {
               last.isComplete = true;
-              special = new RegexpSpecial(`${curBrace}End`);
+              special = new RegexpSpecial(`${curNest.type}End`);
               special.parent = last;
             }
           } else {
@@ -484,8 +483,12 @@ export default class Parser {
           } else {
             target = new RegexpSet();
             curSet = target;
+            if(nextAll.charAt(0) === '^') {
+              curSet.reverse = true;
+              i += 1;
+            }
+            special = new RegexpSpecial('setBegin');
           }
-          special = new RegexpSpecial('setBegin');
           break;
         // match set end "]"
         case s.setEnd:
@@ -511,7 +514,7 @@ export default class Parser {
                 curSet = null;
                 i += 1;
               } else {
-                const first =  curSet.pop();
+                const first = curSet.pop();
                 target = new RegexpRange();
                 target.add(first);
                 lastQueue.parent = target;
@@ -580,7 +583,7 @@ export default class Parser {
           curSet.add(cur);
         } else if(groups.length || lookarounds.length) {
           // tslint:disable-next-line:max-line-length
-          const curQueue = getLastItem(braceQueues) === 'group' ? getLastItem(groups) : getLastItem(lookarounds);
+          const curQueue = getLastItem(nestQueues).type === 'group' ? getLastItem(groups) : getLastItem(lookarounds);
           if(curQueue !== cur) {
             cur.parent = curQueue;
             curQueue.add(cur);
@@ -687,10 +690,11 @@ export interface NumberRange {
  */
 // tslint:disable-next-line:max-classes-per-file
 export abstract class RegexpPart {
-  public readonly queues: RegexpPart[] = [];
+  public queues: RegexpPart[] = [];
   public isComplete: boolean = true;
   public parent: null | RegexpPart = null;
   public buildForTimes: boolean = false;
+  public hasEmptyRef: boolean = false;
   public abstract readonly type: string;
   protected min: number = 1;
   protected max: number = 1;
@@ -708,8 +712,8 @@ export abstract class RegexpPart {
       this[key] = options[key];
     });
   }
-  public add(target: string | RegexpPart, options?: NormalObject): void | boolean | never {
-    //
+  public add(target: RegexpPart | RegexpPart[]): void {
+    this.queues = this.queues.concat(target);
   }
   //
   public pop() {
@@ -808,10 +812,23 @@ export class RegexpReference extends RegexpPart {
   public readonly type = 'reference';
   public ref: RegexpGroup | null = null;
   public index: number;
-  public isEmptyRef: boolean = false;
+  protected emptyRefFlag: boolean = false;
   constructor(input: string) {
     super(input);
     this.index = Number(`${input.slice(1)}`);
+  }
+  public get isEmptyRef() {
+    return this.emptyRefFlag;
+  }
+  public set isEmptyRef(flag: boolean) {
+    this.emptyRefFlag = flag;
+    if(flag) {
+      // tslint:disable-next-line:no-console
+      console.warn(`the reference of \\${this.index} is an empty reference,will match nothing.`);
+      if(this.parent) {
+        this.parent.hasEmptyRef = true;
+      }
+    }
   }
   protected prebuild(conf: BuildConfData) {
     const { ref } = this;
@@ -839,10 +856,6 @@ export class RegexpLookaround extends RegexpEmpty {
     super();
     this.looktype = input;
     this.isComplete = false;
-  }
-  public add(target: RegexpPart) {
-    const { queues } = this;
-    queues.push(target);
   }
   public getRuleInput() {
     return '(' + this.looktype + this.buildRuleInputFromQueues() + ')';
@@ -1029,10 +1042,6 @@ export class RegexpSet extends RegexpPart {
     this.isComplete = false;
     this.buildForTimes = true;
   }
-  public add(target: RegexpPart) {
-    const { queues } = this;
-    queues.push(target);
-  }
   public isSetStart() {
     return this.queues.length === 0;
   }
@@ -1052,12 +1061,10 @@ export class RegexpRange extends RegexpPart {
     this.isComplete = false;
   }
   public add(target: RegexpPart) {
-    const { queues } = this;
-    const total = queues.length;
-    if(total === 1) {
+    super.add(target);
+    if(this.queues.length === 2) {
       this.isComplete = true;
     }
-    this.queues.push(target);
   }
   public getRuleInput() {
     const [prev, next] = this.queues;
@@ -1101,54 +1108,83 @@ export class RegexpASCII extends RegexpHexCode {
   protected rule = /^([0-9A-Fa-f]{2})/;
   protected codeType = 'x';
 }
-
 // tslint:disable-next-line:max-classes-per-file
-export class RegexpGroup extends RegexpPart {
-  public readonly type = 'group';
-  public captureIndex: number = 0;
-  public groupIndex: number = 0;
-  public captureName: string = '';
-  public isRoot: boolean = false;
-  private groups: RegexpPart[][] = [[]];
-  private curRule: RegExp | null = null;
-  constructor() {
+export class RegexpGroupItem extends RegexpPart {
+  public readonly type = 'group-item';
+  constructor(public index: number) {
     super();
-    this.isComplete = false;
-    this.buildForTimes = true;
   }
-  public addNewGroup(queue?: RegexpPart[]) {
-    const { groups } = this;
-    if(queue) {
-      groups[groups.length - 1] = queue;
-    }
-    this.groups.push([]);
-  }
-  public add(target: RegexpPart) {
-    const { groups } = this;
-    const last = getLastItem(groups);
-    last.push(target);
-  }
-  public isGroupStart() {
-    return this.groups[this.groups.length - 1].length === 0;
-  }
-  // override getRuleInput
-  public getRuleInput(parseReference: boolean) {
-    const { groups, captureIndex, isRoot  } = this;
-    let result = '';
-    const segs = groups.map((group) => {
-      if(group.length === 0) {
-        return '';
-      } else {
-        return group.reduce((res, item: RegexpPart) => {
-          let cur: string;
-          if(parseReference && item.type === 'reference' && (item as RegexpReference).ref !== null) {
+  public getRuleInput(parseReference: boolean = false) {
+    return this.queues.reduce((res: string, item: RegexpPart) => {
+      let cur: string;
+      if(parseReference && item.type === 'reference' && (item as RegexpReference).ref !== null) {
             cur = (item as RegexpReference).ref.getRuleInput(parseReference);
           } else {
             cur = this.isEndLimitChar(item) ? '' : item.getRuleInput(parseReference);
           }
-          return  res + cur;
-        }, '');
+      return  res + cur;
+    }, '');
+  }
+  public prebuild(conf: BuildConfData) {
+    return this.queues.reduce((res, queue: RegexpPart) => {
+      let cur: string;
+      if(this.isEndLimitChar(queue)) {
+        // tslint:disable-next-line:no-console
+        console.warn('the ^ and $ of the regexp will ignore');
+        cur = '';
+      } else {
+        cur = queue.build(conf);
       }
+      return res + cur;
+    }, '');
+  }
+  //
+  private isEndLimitChar(target: RegexpPart) {
+    return target.type === 'char' && (target.input === '^' || target.input === '$');
+  }
+}
+// tslint:disable-next-line:max-classes-per-file
+export class RegexpGroup extends RegexpPart {
+  public readonly type = 'group';
+  public captureIndex: number = 0;
+  public captureName: string = '';
+  public isRoot: boolean = false;
+  private curGroupItem: RegexpGroupItem = null;
+  private groups: RegexpGroupItem[] = [];
+  private curRule: RegExp | null = null;
+  private emptyRefItems: number[] = [];
+  constructor() {
+    super();
+    this.isComplete = false;
+    this.buildForTimes = true;
+    this.addNewGroup();
+  }
+  public addNewGroup(queue?: RegexpPart[]) {
+    const { groups } = this;
+    const groupItem = new RegexpGroupItem(groups.length);
+    if(queue) {
+      groupItem.add(queue);
+    }
+    groupItem.parent = this;
+    this.curGroupItem = groupItem;
+    groups.push(groupItem);
+  }
+  public setItemEmptyRef() {
+    const { groups, emptyRefItems } = this;
+    const index = groups.length - 1;
+    if(emptyRefItems.indexOf(index) < 0) {
+      emptyRefItems.push(index);
+    }
+  }
+  public add(target: RegexpPart) {
+    this.curGroupItem.add(target);
+  }
+  // override getRuleInput
+  public getRuleInput(parseReference: boolean = false) {
+    const { groups, captureIndex, isRoot  } = this;
+    let result = '';
+    const segs = groups.map((groupItem) => {
+      return groupItem.getRuleInput(parseReference);
     });
     if(captureIndex === 0) {
       result = '?:' + result;
@@ -1172,8 +1208,8 @@ export class RegexpGroup extends RegexpPart {
     let result: string = '';
     const { flags, namedGroupConf } = conf;
     const groupsLen = groups.length;
-    const filterGroups: RegexpPart[][] = (() => {
-      let curGroups: RegexpPart[][] = [];
+    const filterGroups: RegexpGroupItem[] = (() => {
+      let curGroups: RegexpGroupItem[] = [];
       if(captureName && captureName.indexOf(':') > -1 && namedGroupConf) {
         const segs = captureName.split(':');
         if(segs.length === groupsLen) {
@@ -1213,21 +1249,7 @@ export class RegexpGroup extends RegexpPart {
       const lastGroups = filterGroups.length ? filterGroups : groups;
       const index = makeRandom(0, lastGroups.length - 1);
       const group = lastGroups[index];
-      if(group.length === 0) {
-        result = '';
-      } else {
-        result = group.reduce((res, queue: RegexpPart) => {
-          let cur: string;
-          if(this.isEndLimitChar(queue)) {
-            // tslint:disable-next-line:no-console
-            console.warn('the ^ and $ of the regexp will ignore');
-            cur = '';
-          } else {
-            cur = queue.build(conf);
-          }
-          return res + cur;
-        }, '');
-      }
+      result = group.build(conf);
     }
     if(captureName) {
       conf.namedGroupData[captureName] = result;
@@ -1237,8 +1259,5 @@ export class RegexpGroup extends RegexpPart {
     }
     return result;
   }
-  //
-  private isEndLimitChar(target: RegexpPart) {
-    return target.type === 'char' && (target.input === '^' || target.input === '$');
-  }
+
 }
