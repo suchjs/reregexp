@@ -31,6 +31,7 @@ export default class Parser {
     private flagsHash;
     private totalFlagBinary;
     private rootQueues;
+    private hasLookaround;
     constructor(rule: string, config?: ParserConf);
     setConfig(conf: ParserConf): void;
     build(): string | never;
@@ -51,10 +52,11 @@ export interface NumberRange {
 }
 export declare abstract class RegexpPart {
     input: string;
-    readonly queues: RegexpPart[];
+    queues: RegexpPart[];
     isComplete: boolean;
     parent: null | RegexpPart;
     buildForTimes: boolean;
+    hasEmptyRef: boolean;
     abstract readonly type: string;
     protected min: number;
     protected max: number;
@@ -63,7 +65,7 @@ export declare abstract class RegexpPart {
     constructor(input?: string);
     codePoint: number;
     setRange(options: NumberRange): void;
-    add(target: string | RegexpPart, options?: NormalObject): void | boolean | never;
+    add(target: RegexpPart | RegexpPart[]): void;
     pop(): RegexpPart;
     build(conf: BuildConfData): string | never;
     setDataConf(conf: BuildConfData, result: string): void;
@@ -84,13 +86,21 @@ export declare class RegexpReference extends RegexpPart {
     readonly type = "reference";
     ref: RegexpGroup | null;
     index: number;
+    protected emptyRefFlag: boolean;
     constructor(input: string);
+    isEmptyRef: boolean;
     protected prebuild(conf: BuildConfData): any;
 }
 export declare class RegexpSpecial extends RegexpEmpty {
     readonly special: string;
     readonly type = "special";
     constructor(special: string);
+}
+export declare class RegexpLookaround extends RegexpEmpty {
+    readonly type = "lookaround";
+    readonly looktype: string;
+    constructor(input: string);
+    getRuleInput(): string;
 }
 export declare class RegexpAny extends RegexpPart {
     readonly type = "any";
@@ -167,7 +177,6 @@ export declare class RegexpSet extends RegexpPart {
     readonly type = "set";
     reverse: boolean;
     constructor();
-    add(target: RegexpPart): void;
     isSetStart(): boolean;
     getRuleInput(): string;
     protected prebuild(conf: BuildConfData): string;
@@ -197,20 +206,28 @@ export declare class RegexpASCII extends RegexpHexCode {
     protected rule: RegExp;
     protected codeType: string;
 }
+export declare class RegexpGroupItem extends RegexpPart {
+    index: number;
+    readonly type = "group-item";
+    constructor(index: number);
+    getRuleInput(parseReference?: boolean): string;
+    prebuild(conf: BuildConfData): string;
+    private isEndLimitChar;
+}
 export declare class RegexpGroup extends RegexpPart {
     readonly type = "group";
     captureIndex: number;
-    groupIndex: number;
     captureName: string;
     isRoot: boolean;
+    private curGroupItem;
     private groups;
     private curRule;
+    private emptyRefItems;
     constructor();
     addNewGroup(queue?: RegexpPart[]): void;
+    setItemEmptyRef(): void;
     add(target: RegexpPart): void;
-    isGroupStart(): boolean;
-    getRuleInput(parseReference: boolean): string;
+    getRuleInput(parseReference?: boolean): string;
     protected buildRule(flags: FlagsHash): any;
     protected prebuild(conf: BuildConfData): string;
-    private isEndLimitChar;
 }
