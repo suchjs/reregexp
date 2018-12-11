@@ -332,7 +332,6 @@ export default class Parser {
       const lastQueue = getLastItem(queues);
       let target = null;
       let special: RegexpPart = null;
-
       switch(char) {
         // match translate first,match "\*"
         case s.translate:
@@ -416,30 +415,19 @@ export default class Parser {
         // match group begin "("
         case s.groupBegin:
           const isLookaround = lookaroundRule.test(nextAll);
-          let lastLookaround = null;
-          let cur: RegexpGroup | RegexpLookaround;
           if(isLookaround) {
             const lookType = RegExp.$1;
-            lastLookaround = getLastItem(lookarounds);
-            cur = new RegexpLookaround(lookType);
+            target = new RegexpLookaround(lookType);
             special = new RegexpSpecial('lookaroundBegin');
-            lookarounds.push(cur);
             this.hasLookaround = true;
             i += lookType.length;
           } else {
-            cur = new RegexpGroup();
+            target = new RegexpGroup();
             special = new RegexpSpecial('groupBegin');
-            groups.push(cur);
           }
-          special.parent = cur;
-          queues.push(cur);
-          nestQueues.push(cur);
-          const curQueue = lastGroup || lastLookaround;
-          if(curQueue) {
-            cur.parent = curQueue;
-          }
+          nestQueues.push(target);
           if(!isLookaround) {
-            cur = cur as RegexpGroup;
+            target = target as RegexpGroup;
             // get capture info
             if(captureRule.test(nextAll)) {
               const { $1: all, $2: captureName } = RegExp;
@@ -447,15 +435,15 @@ export default class Parser {
                 // do nothing, captureIndex = 0 by default
               } else {
                 // named group
-                cur.captureIndex = ++groupCaptureIndex;
-                cur.captureName = captureName;
+                target.captureIndex = ++groupCaptureIndex;
+                target.captureName = captureName;
               }
               i += all.length;
             } else {
-              cur.captureIndex = ++groupCaptureIndex;
+              target.captureIndex = ++groupCaptureIndex;
             }
-            if(cur.captureIndex > 0) {
-              captureGroups.push(cur);
+            if(target.captureIndex > 0) {
+              captureGroups.push(target);
             }
           }
           break;
@@ -611,6 +599,10 @@ export default class Parser {
           cur.parent = curSet;
         } else {
           addToGroup(cur);
+        }
+        if(['group', 'lookaround'].indexOf(cur.type) > -1) {
+          const lists = cur.type === 'group' ? groups : lookarounds;
+          (lists as RegexpPart[]).push(cur);
         }
       }
       // add special
