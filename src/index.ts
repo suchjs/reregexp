@@ -206,6 +206,7 @@ const symbols: NormalObject = {
   multiple: '*',
   optional: '?',
   setNotIn: '^',
+  delimiter: '/',
 };
 const flagsBinary: FlagsBinary = {
   i: 0b000001,
@@ -315,7 +316,7 @@ export default class Parser {
       // current character
       const char: string = context.charAt(i++);
       // when in set,ignore these special chars
-      if((curRange || curSet) && ['[', '(', ')', '|', '*', '?', '+', '{', '.', '}', '^', '$'].indexOf(char) > -1) {
+      if((curRange || curSet) && ['[', '(', ')', '|', '*', '?', '+', '{', '.', '}', '^', '$', '/'].indexOf(char) > -1) {
         const newChar = new RegexpChar(char);
         if(curRange) {
           newChar.parent = curRange;
@@ -378,8 +379,8 @@ export default class Parser {
           } else if(/^(\d+)/.test(nextAll)) {
             const no = RegExp.$1;
             if(curSet) {
-              // in set, "\" + \d will parse as octal
-              if(/^(0[0-7]{1,2}|[1-7][0-7]?)/.test(no)) {
+              // in set, "\" + \d will parse as octal,max 0377
+              if(/^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/.test(no)) {
                 const octal = RegExp.$1;
                 target = new RegexpOctal(`\\${octal}`);
                 i += octal.length - 1;
@@ -571,11 +572,14 @@ export default class Parser {
         case s.matchAny:
           target = new RegexpAny();
           break;
+        // match /
+        case s.delimiter:
+          throw new Error(`unexpected pattern end delimiter:"/${nextAll}"`);
+          break;
         // default
         default:
           target = new RegexpChar(char);
       }
-
       // push target to queues
       if(target) {
         const cur = target as RegexpPart;

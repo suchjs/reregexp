@@ -1,6 +1,6 @@
 {
   "name": "reregexp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "reverse analysis regexp,parse to ast,get a string match it.",
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",
