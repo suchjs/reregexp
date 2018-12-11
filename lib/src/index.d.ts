@@ -46,6 +46,10 @@ export default class Parser {
     private checkFlags;
     private hasFlag;
 }
+declare type CharsetType = 'd' | 'w' | 's';
+declare type CharsetNegatedType = 'D' | 'W' | 'S';
+declare type CharsetWordType = 'b' | 'B';
+declare type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
 export interface NumberRange {
     min: number;
     max: number;
@@ -53,17 +57,19 @@ export interface NumberRange {
 export declare abstract class RegexpPart {
     input: string;
     queues: RegexpPart[];
-    isComplete: boolean;
-    parent: null | RegexpPart;
-    buildForTimes: boolean;
-    hasEmptyRef: boolean;
+    codePoint: number;
     abstract readonly type: string;
     protected min: number;
     protected max: number;
-    protected curCodePoint: number;
     protected dataConf: NormalObject;
+    protected buildForTimes: boolean;
+    protected curParent: RegexpPart;
+    protected matchNothing: boolean;
+    protected completed: boolean;
     constructor(input?: string);
-    codePoint: number;
+    parent: RegexpPart;
+    isComplete: boolean;
+    isMatchNothing: boolean;
     setRange(options: NumberRange): void;
     add(target: RegexpPart | RegexpPart[]): void;
     pop(): RegexpPart;
@@ -86,9 +92,7 @@ export declare class RegexpReference extends RegexpPart {
     readonly type = "reference";
     ref: RegexpGroup | null;
     index: number;
-    protected emptyRefFlag: boolean;
     constructor(input: string);
-    isEmptyRef: boolean;
     protected prebuild(conf: BuildConfData): any;
 }
 export declare class RegexpSpecial extends RegexpEmpty {
@@ -127,7 +131,7 @@ export declare class RegexpControl extends RegexpPart {
 }
 export declare class RegexpCharset extends RegexpPart {
     readonly type = "charset";
-    readonly charset: string;
+    readonly charset: CharsetAllType;
     constructor(input: string);
     protected prebuild(conf: BuildConfData): string;
 }
@@ -176,7 +180,10 @@ export declare class RegexpTimesQuantifiers extends RegexpTimes {
 export declare class RegexpSet extends RegexpPart {
     readonly type = "set";
     reverse: boolean;
+    private isMatchAnything;
+    private codePointResult;
     constructor();
+    isComplete: boolean;
     isSetStart(): boolean;
     getRuleInput(): string;
     protected prebuild(conf: BuildConfData): string;
@@ -218,16 +225,17 @@ export declare class RegexpGroup extends RegexpPart {
     readonly type = "group";
     captureIndex: number;
     captureName: string;
+    queues: RegexpGroupItem[];
     isRoot: boolean;
     private curGroupItem;
-    private groups;
     private curRule;
-    private emptyRefItems;
     constructor();
-    addNewGroup(queue?: RegexpPart[]): void;
-    setItemEmptyRef(): void;
-    add(target: RegexpPart): void;
+    isComplete: boolean;
+    getCurGroupItem(): RegexpGroupItem;
+    addNewGroup(queue?: RegexpPart[]): RegexpGroupItem;
+    addItem(target: RegexpPart): void;
     getRuleInput(parseReference?: boolean): string;
     protected buildRule(flags: FlagsHash): any;
     protected prebuild(conf: BuildConfData): string;
 }
+export {};

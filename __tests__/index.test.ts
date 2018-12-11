@@ -46,4 +46,12 @@ describe('test regexp parser', () => {
     });
     expect(['abbddddddaa', 'abbddddddbb'].indexOf(value) > -1).toBeTruthy();
   });
+  test('parse regexp set', () => {
+    const r1 = /[a-z]/;
+    const r2 = /[]/;
+    const r3 = /^[^]$/;
+    expect(/^[a-z]$/.test(validValue(r1))).toBeTruthy();
+    expect(validValue(r2) === '').toBeTruthy();
+    expect(validMatch(r3)).toBeTruthy();
+  });
 });

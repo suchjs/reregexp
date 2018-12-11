@@ -122,25 +122,26 @@ class CharsetHelper {
   //
   public static getCharsetInfo(type: CharsetType | CharsetNegatedType | '.', flags: FlagsHash = {}): CodePointResult {
     let result: CodePointResult;
-    const self = CharsetHelper;
+    let last: CodePointResult;
+    const helper = CharsetHelper;
     if(['w', 'd', 's'].indexOf(type) > -1) {
-      result = self.charsetOf(type as CharsetType);
+      last = helper.charsetOf(type as CharsetType);
     } else {
       if(type === '.') {
         if(flags.s) {
-          result = self.charsetOfDotall();
+          result = helper.charsetOfDotall();
         } else {
-          result = self.charsetOfAll();
+          result = helper.charsetOfAll();
         }
       } else {
-        result = self.charsetOfNegated(type as CharsetNegatedType);
+        result = helper.charsetOfNegated(type as CharsetNegatedType);
       }
       if(flags.u) {
-        result.ranges = result.ranges.concat([self.bigCharPoint]);
-        result.totals = result.totals.slice(0).concat(self.bigCharTotal);
+        last.ranges = result.ranges.slice(0).concat([helper.bigCharPoint]);
+        last.totals = result.totals.slice(0).concat(helper.bigCharTotal);
       }
     }
-    return result;
+    return last || result;
   }
   // make the type
   public static make(type: CharsetType | CharsetNegatedType | '.', flags: FlagsHash = {}): string {
@@ -1079,15 +1080,11 @@ export class RegexpSet extends RegexpPart {
   }
   set isComplete(value: boolean) {
     this.completed = value;
-    if(value === true) {
-      if(this.queues.length === 0) {
-        if(this.reverse) {
-          this.isMatchAnything = true;
-        } else {
-          this.isMatchNothing = true;
-        }
-      } else if(this.reverse) {
-        // need check
+    if(value === true && this.queues.length === 0) {
+      if(this.reverse) {
+        this.isMatchAnything = true;
+      } else {
+        this.isMatchNothing = true;
       }
     }
   }
@@ -1112,10 +1109,17 @@ export class RegexpSet extends RegexpPart {
       if(!this.codePointResult) {
         const ranges = this.queues.reduce((res: CodePointRanges, item: RegexpPart) => {
           const { type } = item;
-          let cur;
+          let cur: any[];
           if(type === 'charset') {
             // tslint:disable-next-line:max-line-length
-            cur = charH.getCharsetInfo((item as RegexpCharset).charset as (CharsetType | CharsetNegatedType), conf.flags).ranges;
+            const charset = (item as RegexpCharset).charset as CharsetAllType;
+            if(charset === 'b' || charset === 'B') {
+              // tslint:disable-next-line:no-console
+              console.warn('the charset \\b or \\B will ignore');
+              cur = [];
+            } else {
+              cur = charH.getCharsetInfo(charset, conf.flags).ranges;
+            }
           } else if(type === 'range') {
             cur = [(item as RegexpRange).queues.map((e: RegexpPart) => {
               return e.codePoint;
@@ -1125,7 +1129,7 @@ export class RegexpSet extends RegexpPart {
           }
           return res.concat(cur);
         }, []);
-        ranges.push([0x110000]);
+        ranges.push([0xD800, 0xDFFF], conf.flags.u ? [0x110000] : [0x10000]);
         ranges.sort((a: number[], b: number[]) => {
           return b[0] > a[0] ? -1 : (b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1);
         });
@@ -1138,7 +1142,7 @@ export class RegexpSet extends RegexpPart {
           if(point < start) {
             negated.push(point + 1 === start ? [point] : [point, start - 1]);
           }
-          point = end + 1;
+          point = Math.max(end + 1, point);
         }
         if(negated.length === 0) {
           this.isMatchNothing = true;
@@ -1152,8 +1156,13 @@ export class RegexpSet extends RegexpPart {
             }
             return total;
           });
-          this.codePointResult = { totals, ranges };
+          this.codePointResult = { totals, ranges: negated };
         }
+      }
+      if(this.isMatchNothing) {
+        // tslint:disable-next-line:no-console
+        console.error('the rule is match nothing');
+        return '';
       }
       return charH.makeOne(this.codePointResult);
     }
