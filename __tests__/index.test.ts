@@ -14,6 +14,7 @@ const validParser = (rule: Rule) => {
     } catch(e) {
       throw e;
     }
+    return true;
   };
 };
 const validMatch = (rule: RegExp) => {
@@ -27,19 +28,49 @@ const validValue = (rule: Rule, conf: {
   return (new RegexpParser(regexpToStr(rule), conf)).build();
 };
 describe('test regexp parser', () => {
-  test('parse invalid rule', () => {
+  test('test normal patterns', () => {
     expect(validParser('//')).toThrow();
     expect(validParser('/a/ii')).toThrow();
     expect(validParser('/(/')).toThrow();
     expect(validParser('/)/')).toThrow();
     expect(validParser('/[/')).toThrow();
+    expect(validParser('/]/')).toBeTruthy();
+    expect(validParser('/?/')).toThrow();
+    expect(validParser('/(?)/')).toThrow();
+    expect(validParser('/(|?)/')).toThrow();
+    expect(validParser('/^?/')).toThrow();
+    expect(validParser('/[/]/')).toBeTruthy();
+    expect(validParser('/a//')).toThrow();
   });
-  test('parse string match', () => {
+  test('test times valid', () => {
+    expect(validParser('/a*+/')).toThrow();
+    expect(validParser('/a**/')).toThrow();
+    expect(validParser('/a++/')).toThrow();
+    expect(validParser('/a+*/')).toThrow();
+    expect(validParser('/a?*/')).toThrow();
+    expect(validParser('/a?+/')).toThrow();
+    expect(validParser('/a*?/')).toBeTruthy();
+    expect(validParser('/a*?*/')).toThrow();
+    expect(validParser('/a+?/')).toBeTruthy();
+    expect(validParser('/a+?+/')).toThrow();
+    expect(validParser('/a??/')).toBeTruthy();
+    expect(validParser('/a???/')).toThrow();
+    expect(validParser('/a{3}?/')).toBeTruthy();
+    expect(validParser('/a{3}+/')).toThrow();
+    expect(validParser('/a{3}*/')).toThrow();
+    expect(validParser('/a{3}*/')).toThrow();
+    expect(validParser('/a{3}??/')).toThrow();
+  });
+  test('test string match', () => {
     expect(validMatch(/a/)).toBeTruthy();
     expect(validMatch(/a{3}/)).toBeTruthy();
     expect(validMatch(/a./)).toBeTruthy();
+    expect(validMatch(/[abc]/)).toBeTruthy();
+    expect(validMatch(/[\w]/)).toBeTruthy();
+    expect(validMatch(/[^\w]/)).toBeTruthy();
+    expect(validMatch(/(a|b|cc|\d+)/)).toBeTruthy();
   });
-  test('parse value exactly', () => {
+  test('test value exactly', () => {
     const v1: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
       namedGroupConf: {
         namecap: ['aa', 'bb'],
@@ -49,12 +80,16 @@ describe('test regexp parser', () => {
     const v2: string = validValue('/(?<name>haha)\\k<name>/');
     expect(v2 === 'hahahaha').toBeTruthy();
   });
-  test('parse regexp set', () => {
+  test('test regexp set', () => {
     const r1 = /[a-z]/;
     const r2 = /[]/;
     const r3 = /^[^]$/;
+    const r4 = /[^\w\W]/;
+    const r5 = /[^a-zA-Z0-9_\W]/;
     expect(/^[a-z]$/.test(validValue(r1))).toBeTruthy();
     expect(() => validValue(r2)).toThrow();
     expect(validMatch(r3)).toBeTruthy();
+    expect(() => validValue(r4)).toThrow();
+    expect(() => validValue(r5)).toThrow();
   });
 });

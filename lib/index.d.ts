@@ -143,7 +143,11 @@ export declare class RegexpPrint extends RegexpPart {
 }
 export declare class RegexpIgnore extends RegexpEmpty {
     readonly type = "ignore";
-    protected prebuild(): string;
+}
+export declare class RegexpAnchor extends RegexpEmpty {
+    readonly type = "anchor";
+    anchor: string;
+    constructor(input: string);
 }
 export declare class RegexpChar extends RegexpOrigin {
     readonly type = "char";

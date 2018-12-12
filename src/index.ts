@@ -325,6 +325,10 @@ export default class Parser {
         }
       }
     };
+    const isWrongRepeat = (type: string, prev: RegexpCharset): boolean => {
+      const denyTypes = ['groupBegin', 'groupSplitor', 'times', 'begin', 'anchor'];
+      return denyTypes.indexOf(type) > -1 || (type === 'charset' && prev.charset.toLowerCase() === 'b');
+    };
     // /()/
     while(i < j) {
       // current character
@@ -574,21 +578,10 @@ export default class Parser {
             const type = lastQueue.special || lastQueue.type;
             const error = `[${lastQueue.input}]nothing to repeat[index:${i}]:${context.slice(i - 1, i - 1 + num)}`;
             // tslint:disable-next-line:max-line-length
-            if(type === 'groupStart' || type === 'groupSplitor' || type === 'times' || type === 'multipleOptional' || type === 'begin' || (type === 'charset' && lastQueue.charset.toLowerCase() === 'b')) {
+            if(isWrongRepeat(type, lastQueue)) {
               throw new Error(error);
-            } else if(type === 'multipleEnd') {
-              // allow {1,2}?,??,but not allow ?+,{1,2}+,
-              if(char === s.optional) {
-                target = new RegexpIgnore('\\?');
-                special = new RegexpSpecial('multipleOptional');
-              } else {
-                throw new Error(error);
-              }
             } else {
               i += num - 1;
-              if(char === s.multipleBegin || char === s.optional) {
-                special = new RegexpSpecial('multipleEnd');
-              }
               if(type === 'groupEnd' || type === 'setEnd') {
                 target.target = lastQueue.parent;
               } else {
@@ -606,6 +599,10 @@ export default class Parser {
         // match /
         case s.delimiter:
           throw new Error(`unexpected pattern end delimiter:"/${nextAll}"`);
+        // match ^$
+        case s.beginWith:
+        case s.endWith:
+          target = new RegexpAnchor(char);
           break;
         // default
         default:
@@ -864,7 +861,6 @@ export abstract class RegexpPart {
     }
   }
 }
-
 // tslint:disable-next-line:max-classes-per-file
 export abstract class RegexpEmpty extends RegexpPart {
   constructor(input?: string) {
@@ -996,10 +992,16 @@ export class RegexpPrint extends RegexpPart {
 // tslint:disable-next-line:max-classes-per-file
 export class RegexpIgnore extends RegexpEmpty {
   public readonly type = 'ignore';
-  protected prebuild() {
+}
+// tslint:disable-next-line:max-classes-per-file
+export class RegexpAnchor extends RegexpEmpty {
+  public readonly type = 'anchor';
+  public anchor: string;
+  constructor(input: string) {
+    super(input);
+    this.anchor = input;
     // tslint:disable-next-line:no-console
-    console.warn(`the "${this.input}" will ignore.`);
-    return '';
+    console.warn(`the anchor of "${this.input}" will ignore.`);
   }
 }
 // tslint:disable-next-line:max-classes-per-file
@@ -1064,16 +1066,17 @@ export abstract class RegexpTimes extends RegexpPart {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class RegexpTimesMulti extends RegexpTimes {
-  protected rule = /^(\{(\d+)(,(\d*))?})/;
+  protected rule = /^(\{(\d+)(,(\d*))?}(\??))/;
   public parse() {
-    const { $2: min, $3: code, $4: max} = RegExp;
+    const { $2: min, $3: code, $4: max, $5: optional} = RegExp;
+    this.greedy = optional !== '?';
     this.minRepeat = parseInt(min, 10);
     this.maxRepeat = Number(max) ? parseInt(max, 10) : (code ? this.minRepeat + this.maxNum * 2 : this.minRepeat);
   }
 }
 // tslint:disable-next-line:max-classes-per-file
 export class RegexpTimesQuantifiers extends RegexpTimes {
-  protected rule = /^(\*\?|\+\?|\*|\+|\?)/;
+  protected rule = /^(\*\?|\+\?|\?\?|\*|\+|\?)/;
   public parse() {
     const all = RegExp.$1;
     this.greedy = all.length === 1;

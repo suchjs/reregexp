@@ -10,20 +10,20 @@ npm install --save reregexp
 ```
 ```javascript
 import RegexpParser from 'reregexp';
-const parser = new RegexpParser('/a{1}b{2}(d{3})\\1(?<mine>[a-z]{2})/',{
+const parser = new RegexpParser('/(a)\\1(?<named>b)\\k<named>(?<override>\\w+)/',{
   namedGroupConf:{
-    mine: ['aa','bb']
+    override: ['cc','dd']
   }
 });
 parser.build();
 // result =>
-// "abbddddddaa" or "abbddddddbb"
+// "aabbcc" or "aabbdd"
 
 ```
 ## API
 `.build()` build a string that match the regexp.
 
-`.info()` get an regexp parse queues,flags,lastRule after remove named capture.
+`.info()` get an regexp parse queues,flags,lastRule after remove named captures.
 ```javascript
 {
   rule: '',
@@ -33,10 +33,10 @@ parser.build();
   queues: [],
 }
 ```
-## Build precautions
-1. `^$` the start,end match symbols will be ignored.
-2. `(?=) (?!) (?<=) (?<!)` the regexp lookhead,lookbehind will throw an error.
-3. `\b \B` will be ignored.
+## Build precautions,do not use any regexp anchors.
+1. `^` `$` the start,end anchors will be ignored.
+2. `(?=)` `(?!)` `(?<=)` `(?<!)` the regexp lookhead,lookbehind will throw an error when run `build()`.
+3. `\b` `\B` will be ignored.
 
 ## Questions & Bugs?
 Welcome to report to us with issue if you meet any question or bug. [Issue](https://github.com/suchjs/reregexp/issues)
