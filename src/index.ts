@@ -236,6 +236,7 @@ export default class Parser {
   private totalFlagBinary: number = 0;
   private rootQueues: RegexpPart[] = [];
   private hasLookaround: boolean = false;
+  private hasNullRoot: boolean = null;
   constructor(public readonly rule: string, private config: ParserConf = {}) {
     if(regexpRule.test(rule)) {
       this.rule = rule;
@@ -257,6 +258,10 @@ export default class Parser {
     if(this.hasLookaround) {
       throw new Error('the build method does not support lookarounds.');
     }
+    const nullRootError = new Error('the regexp has null expression,will match nothing');
+    if(this.hasNullRoot === true) {
+      throw nullRootError;
+    }
     const { rootQueues } = this;
     const conf: BuildConfData = {
       ...this.config,
@@ -266,9 +271,18 @@ export default class Parser {
       beginWiths: [],
       endWiths: [],
     };
-    return rootQueues.reduce((res, queue) => {
+    const result = rootQueues.reduce((res, queue) => {
       return res + queue.build(conf);
     }, '');
+    if(this.hasNullRoot === null) {
+      if(rootQueues.filter((item) => item.isMatchNothing).length) {
+        this.hasNullRoot = true;
+        throw nullRootError;
+      } else {
+        this.hasNullRoot = false;
+      }
+    }
+    return result;
   }
   // get all info
   public info() {
@@ -291,6 +305,7 @@ export default class Parser {
     const groups: RegexpGroup[] = [];
     const lookarounds: RegexpLookaround[] = [];
     const captureGroups: RegexpGroup[] = [];
+    const namedCaptures: {[index: string]: RegexpGroup} = {};
     const refGroups: {[index: string]: RegexpGroup | null } = {};
     const captureRule = /^(\?(?:<(.+?)>|:))/;
     const lookaroundRule = /^(\?(?:<=|<!|=|!))/;
@@ -367,7 +382,9 @@ export default class Parser {
                 target = new RegexpControl(code);
                 i++;
               } else {
+                // treat it with \ and character c
                 target = new RegexpChar('\\');
+                i--;
               }
             }
           } else if(['d', 'D', 'w', 'W', 's', 'S', 'b', 'B'].indexOf(next) > -1) {
@@ -408,6 +425,20 @@ export default class Parser {
                 }
               }
             }
+          } else if(next === 'k' && /^<([^>]+?)>/.test(context.slice(i))) {
+            const name = RegExp.$1;
+            if(!namedCaptures[name]) {
+              throw new Error(`Invalid named capture referenced:${name}`);
+            } else {
+              i += name.length + 2;
+              const refGroup = namedCaptures[name];
+              target = new RegexpReference(`\\k<${name}>`, refGroup.captureIndex);
+              if(refGroup.isAncestorOf(lastGroup)) {
+                target.ref = null;
+              } else {
+                target.ref = refGroup;
+              }
+            }
           } else {
             // charsets
             target = new RegexpTranslateChar(input);
@@ -438,6 +469,7 @@ export default class Parser {
                 // named group
                 target.captureIndex = ++groupCaptureIndex;
                 target.captureName = captureName;
+                namedCaptures[captureName] = target;
               }
               i += all.length;
             } else {
@@ -853,9 +885,13 @@ export class RegexpReference extends RegexpPart {
   public readonly type = 'reference';
   public ref: RegexpGroup | null = null;
   public index: number;
-  constructor(input: string) {
+  constructor(input: string, index?: number) {
     super(input);
-    this.index = Number(`${input.slice(1)}`);
+    if(index) {
+      this.index = index;
+    } else {
+      this.index = Number(`${input.slice(1)}`);
+    }
   }
   protected prebuild(conf: BuildConfData) {
     const { ref } = this;

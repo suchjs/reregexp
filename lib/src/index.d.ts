@@ -32,6 +32,7 @@ export default class Parser {
     private totalFlagBinary;
     private rootQueues;
     private hasLookaround;
+    private hasNullRoot;
     constructor(rule: string, config?: ParserConf);
     setConfig(conf: ParserConf): void;
     build(): string | never;
@@ -92,7 +93,7 @@ export declare class RegexpReference extends RegexpPart {
     readonly type = "reference";
     ref: RegexpGroup | null;
     index: number;
-    constructor(input: string);
+    constructor(input: string, index?: number);
     protected prebuild(conf: BuildConfData): any;
 }
 export declare class RegexpSpecial extends RegexpEmpty {
