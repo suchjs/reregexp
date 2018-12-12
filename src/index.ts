@@ -179,9 +179,8 @@ class CharsetHelper {
   }
   protected static readonly cache: CharsetCache = {};
   // contructor
-  constructor() {
-    // do nothing
-    return CharsetHelper;
+  protected constructor() {
+    // do nothing, no methods, no properties
   }
 }
 const charH = CharsetHelper;
@@ -432,7 +431,7 @@ export default class Parser {
             } else {
               i += name.length + 2;
               const refGroup = namedCaptures[name];
-              target = new RegexpReference(`\\k<${name}>`, refGroup.captureIndex);
+              target = new RegexpReference(`\\${refGroup.captureIndex}`, name);
               if(refGroup.isAncestorOf(lastGroup)) {
                 target.ref = null;
               } else {
@@ -885,13 +884,9 @@ export class RegexpReference extends RegexpPart {
   public readonly type = 'reference';
   public ref: RegexpGroup | null = null;
   public index: number;
-  constructor(input: string, index?: number) {
+  constructor(input: string, public name: string = '') {
     super(input);
-    if(index) {
-      this.index = index;
-    } else {
-      this.index = Number(`${input.slice(1)}`);
-    }
+    this.index = Number(`${input.slice(1)}`);
   }
   protected prebuild(conf: BuildConfData) {
     const { ref } = this;

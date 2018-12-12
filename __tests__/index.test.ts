@@ -9,6 +9,7 @@ const regexpToStr = (rule: Rule): string => {
 const validParser = (rule: Rule) => {
   return () => {
     try {
+      // tslint:disable-next-line:no-unused-expression
       new RegexpParser(regexpToStr(rule));
     } catch(e) {
       throw e;
@@ -39,19 +40,21 @@ describe('test regexp parser', () => {
     expect(validMatch(/a./)).toBeTruthy();
   });
   test('parse value exactly', () => {
-    const value: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
+    const v1: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
       namedGroupConf: {
         namecap: ['aa', 'bb'],
       },
     });
-    expect(['abbddddddaa', 'abbddddddbb'].indexOf(value) > -1).toBeTruthy();
+    expect(['abbddddddaa', 'abbddddddbb'].indexOf(v1) > -1).toBeTruthy();
+    const v2: string = validValue('/(?<name>haha)\\k<name>/');
+    expect(v2 === 'hahahaha').toBeTruthy();
   });
   test('parse regexp set', () => {
     const r1 = /[a-z]/;
     const r2 = /[]/;
     const r3 = /^[^]$/;
     expect(/^[a-z]$/.test(validValue(r1))).toBeTruthy();
-    expect(validValue(r2) === '').toBeTruthy();
+    expect(() => validValue(r2)).toThrow();
     expect(validMatch(r3)).toBeTruthy();
   });
 });

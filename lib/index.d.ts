@@ -90,10 +90,11 @@ export declare abstract class RegexpOrigin extends RegexpPart {
     protected prebuild(): string;
 }
 export declare class RegexpReference extends RegexpPart {
+    name: string;
     readonly type = "reference";
     ref: RegexpGroup | null;
     index: number;
-    constructor(input: string, index?: number);
+    constructor(input: string, name?: string);
     protected prebuild(conf: BuildConfData): any;
 }
 export declare class RegexpSpecial extends RegexpEmpty {
