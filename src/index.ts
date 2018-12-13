@@ -316,7 +316,7 @@ export default class Parser {
     const addToGroup = (cur: RegexpPart) => {
       if(groups.length || lookarounds.length) {
         // tslint:disable-next-line:max-line-length
-        const isGroup = getLastItem(nestQueues).type === 'group';
+        const isGroup = (nestQueues.length && getLastItem(nestQueues).type === 'group') || groups.length > 0;
         const curQueue = isGroup ? getLastItem(groups) : getLastItem(lookarounds);
         if(isGroup) {
           curQueue.addItem(cur);
@@ -504,10 +504,11 @@ export default class Parser {
         case s.groupSplitor:
           const group = getLastItem(groups);
           if(!group) {
-            target = new RegexpGroup();
-            target.isRoot = true;
-            target.addNewGroup(queues.splice(0, queues.length, target));
-            groups.push(target);
+            const rootGroup = new RegexpGroup();
+            rootGroup.isRoot = true;
+            rootGroup.addRootItem(queues.slice(1));
+            queues.splice(1, 0, rootGroup);
+            groups.push(rootGroup);
           } else {
             group.addNewGroup();
           }
@@ -646,11 +647,8 @@ export default class Parser {
       }
     }
     // if root group,set completed when parse end
-    if(queues.length === 1 && queues[0].type === 'group') {
-      const group = queues[0] as RegexpGroup;
-      if(group.isRoot === true) {
-        group.isComplete = true;
-      }
+    if(queues.length > 1 && queues[1].type === 'group' && (queues[1] as RegexpGroup).isRoot === true) {
+      queues[1].isComplete = true;
     }
     // check the queues whether if completed and saved the root queues
     const rootQueues: RegexpPart[] = [];
@@ -1125,7 +1123,8 @@ export class RegexpSet extends RegexpPart {
     return '[' + (this.reverse ? '^' : '')   + this.buildRuleInputFromQueues() + ']';
   }
   protected prebuild(conf: BuildConfData) {
-    const index = makeRandom(0, this.queues.length - 1);
+    const { queues } = this;
+    const index = makeRandom(0, queues.length - 1);
     if(this.isMatchAnything) {
       return (new RegexpAny()).build(conf);
     }
@@ -1137,56 +1136,63 @@ export class RegexpSet extends RegexpPart {
     if(this.reverse) {
       // reverse
       if(!this.codePointResult) {
-        const ranges = this.queues.reduce((res: CodePointRanges, item: RegexpPart) => {
-          const { type } = item;
-          let cur: any[];
-          if(type === 'charset') {
-            // tslint:disable-next-line:max-line-length
-            const charset = (item as RegexpCharset).charset as CharsetAllType;
-            if(charset === 'b' || charset === 'B') {
-              // tslint:disable-next-line:no-console
-              console.warn('the charset \\b or \\B will ignore');
-              cur = [];
-            } else {
-              cur = charH.getCharsetInfo(charset, conf.flags).ranges;
-            }
-          } else if(type === 'range') {
-            cur = [(item as RegexpRange).queues.map((e: RegexpPart) => {
-              return e.codePoint;
-            })];
-          } else {
-            cur = [[item.codePoint]];
-          }
-          return res.concat(cur);
-        }, []);
-        ranges.push([0xD800, 0xDFFF], conf.flags.u ? [0x110000] : [0x10000]);
-        ranges.sort((a: number[], b: number[]) => {
-          return b[0] > a[0] ? -1 : (b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1);
-        });
-        const negated = [];
-        let point = 0;
-        for(let i = 0, j = ranges.length; i < j; i++) {
-          const cur = ranges[i];
-          const [start] = cur;
-          const end = cur[1] || start;
-          if(point < start) {
-            negated.push(point + 1 === start ? [point] : [point, start - 1]);
-          }
-          point = Math.max(end + 1, point);
-        }
-        if(negated.length === 0) {
-          this.isMatchNothing = true;
+        // tslint:disable-next-line:max-line-length
+        if(queues.length === 1 && queues[0].type === 'charset' && ['w', 's', 'd'].indexOf((queues[0] as RegexpCharset).charset.toLowerCase()) > -1) {
+          const charCode = (queues[0] as RegexpCharset).charset.charCodeAt(0) ^ 0b100000;
+          const charset = String.fromCharCode(charCode) as (CharsetType | CharsetNegatedType);
+          this.codePointResult = charH.getCharsetInfo(charset, conf.flags);
         } else {
-          let total = 0;
-          const totals = negated.map((item: number[]) => {
-            if(item.length === 1) {
-              total += 1;
+          const ranges = queues.reduce((res: CodePointRanges, item: RegexpPart) => {
+            const { type } = item;
+            let cur: any[];
+            if(type === 'charset') {
+              // tslint:disable-next-line:max-line-length
+              const charset = (item as RegexpCharset).charset as CharsetAllType;
+              if(charset === 'b' || charset === 'B') {
+                // tslint:disable-next-line:no-console
+                console.warn('the charset \\b or \\B will ignore');
+                cur = [];
+              } else {
+                cur = charH.getCharsetInfo(charset, conf.flags).ranges;
+              }
+            } else if(type === 'range') {
+              cur = [(item as RegexpRange).queues.map((e: RegexpPart) => {
+                return e.codePoint;
+              })];
             } else {
-              total += item[1] - item[0] + 1;
+              cur = [[item.codePoint]];
             }
-            return total;
+            return res.concat(cur);
+          }, []);
+          ranges.push([0xD800, 0xDFFF], conf.flags.u ? [0x110000] : [0x10000]);
+          ranges.sort((a: number[], b: number[]) => {
+            return b[0] > a[0] ? -1 : (b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1);
           });
-          this.codePointResult = { totals, ranges: negated };
+          const negated = [];
+          let point = 0;
+          for(let i = 0, j = ranges.length; i < j; i++) {
+            const cur = ranges[i];
+            const [start] = cur;
+            const end = cur[1] || start;
+            if(point < start) {
+              negated.push(point + 1 === start ? [point] : [point, start - 1]);
+            }
+            point = Math.max(end + 1, point);
+          }
+          if(negated.length === 0) {
+            this.isMatchNothing = true;
+          } else {
+            let total = 0;
+            const totals = negated.map((item: number[]) => {
+              if(item.length === 1) {
+                total += 1;
+              } else {
+                total += item[1] - item[0] + 1;
+              }
+              return total;
+            });
+            this.codePointResult = { totals, ranges: negated };
+          }
         }
       }
       if(this.isMatchNothing) {
@@ -1276,6 +1282,7 @@ export class RegexpGroupItem extends RegexpPart {
     }, '');
   }
   public prebuild(conf: BuildConfData) {
+    console.log('build item', this.min, this.max, this.queues);
     return this.queues.reduce((res, queue: RegexpPart) => {
       let cur: string;
       if(this.isEndLimitChar(queue)) {
@@ -1322,20 +1329,20 @@ export class RegexpGroup extends RegexpPart {
   public getCurGroupItem() {
     return this.curGroupItem;
   }
-  public addNewGroup(queue?: RegexpPart[]) {
+  public addNewGroup() {
     const { queues } = this;
-    let groupItem: RegexpGroupItem;
-    if(queue) {
-      groupItem = this.curGroupItem;
-      queue.map((item: RegexpPart) => {
-        item.parent = groupItem;
-      });
-    } else {
-      groupItem = new RegexpGroupItem(queues.length);
-      this.curGroupItem = groupItem;
-    }
+    const groupItem = new RegexpGroupItem(queues.length);
+    this.curGroupItem = groupItem;
     groupItem.parent = this;
     return groupItem;
+  }
+  public addRootItem(target: RegexpPart[]) {
+    target.map((item: RegexpPart) => {
+      if(item.parent === null) {
+        item.parent = this.curGroupItem;
+      }
+    });
+    this.addNewGroup();
   }
   public addItem(target: RegexpPart) {
     target.parent = this.curGroupItem;

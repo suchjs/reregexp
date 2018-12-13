@@ -238,7 +238,8 @@ export declare class RegexpGroup extends RegexpPart {
     constructor();
     isComplete: boolean;
     getCurGroupItem(): RegexpGroupItem;
-    addNewGroup(queue?: RegexpPart[]): RegexpGroupItem;
+    addNewGroup(): RegexpGroupItem;
+    addRootItem(target: RegexpPart[]): void;
     addItem(target: RegexpPart): void;
     getRuleInput(parseReference?: boolean): string;
     protected buildRule(flags: FlagsHash): any;

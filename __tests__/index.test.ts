@@ -69,6 +69,7 @@ describe('test regexp parser', () => {
     expect(validMatch(/[\w]/)).toBeTruthy();
     expect(validMatch(/[^\w]/)).toBeTruthy();
     expect(validMatch(/(a|b|cc|\d+)/)).toBeTruthy();
+    expect(validMatch(/a(zz)|b(dd)|c(ef)|d(gg)/)).toBeTruthy();
   });
   test('test value exactly', () => {
     const v1: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
