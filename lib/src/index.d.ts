@@ -47,10 +47,22 @@ export default class Parser {
     private checkFlags;
     private hasFlag;
 }
-declare type CharsetType = 'd' | 'w' | 's';
-declare type CharsetNegatedType = 'D' | 'W' | 'S';
-declare type CharsetWordType = 'b' | 'B';
-declare type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
+export declare type CharsetType = 'd' | 'w' | 's';
+export declare type CharsetNegatedType = 'D' | 'W' | 'S';
+export declare type CharsetWordType = 'b' | 'B';
+export declare type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
+export declare type CharsetCacheType = CharsetNegatedType | 'DOTALL' | 'ALL';
+export declare type CharsetCache = {
+    [key in CharsetCacheType]?: CodePointResult;
+};
+export declare type CodePointRanges = number[][];
+export declare type CodePointData<T> = {
+    [key in CharsetType]: T;
+};
+export interface CodePointResult {
+    ranges: CodePointRanges;
+    totals: number[];
+}
 export interface NumberRange {
     min: number;
     max: number;
@@ -69,6 +81,7 @@ export declare abstract class RegexpPart {
     protected completed: boolean;
     constructor(input?: string);
     parent: RegexpPart;
+    linkParent: RegexpPart;
     isComplete: boolean;
     isMatchNothing: boolean;
     setRange(options: NumberRange): void;
@@ -163,6 +176,11 @@ export declare class RegexpOctal extends RegexpPart {
     constructor(input: string);
     protected prebuild(): string;
 }
+export declare class RegexpRefOrNumber extends RegexpPart {
+    readonly type = "refornumber";
+    constructor(input: string);
+    protected prebuild(): never;
+}
 export declare abstract class RegexpTimes extends RegexpPart {
     readonly type = "times";
     protected readonly maxNum: number;
@@ -245,4 +263,3 @@ export declare class RegexpGroup extends RegexpPart {
     protected buildRule(flags: FlagsHash): any;
     protected prebuild(conf: BuildConfData): string;
 }
-export {};

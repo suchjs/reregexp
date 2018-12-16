@@ -70,6 +70,11 @@ describe('test regexp parser', () => {
     expect(validMatch(/[^\w]/)).toBeTruthy();
     expect(validMatch(/(a|b|cc|\d+)/)).toBeTruthy();
     expect(validMatch(/a(zz)|b(dd)|c(ef)|d(gg)/)).toBeTruthy();
+    expect(validMatch(/(a)\89/)).toBeTruthy();
+    expect(validMatch(/\1(a)/)).toBeTruthy();
+    expect(validMatch(/\12(a)/)).toBeTruthy();
+    expect(validMatch(/\377(a)/)).toBeTruthy();
+    expect(validMatch(/\8(a)(b)(c)(d)(e)(f)(g)(h)(i)/)).toBeTruthy();
   });
   test('test value exactly', () => {
     const v1: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {

@@ -310,6 +310,7 @@ export default class Parser {
     const lookaroundRule = /^(\?(?:<=|<!|=|!))/;
     const hasFlagU = this.hasFlag('u');
     const nestQueues: RegexpPart[] = [];
+    const refOrNumbers: RegexpPart[] = [];
     let groupCaptureIndex: number = 0;
     let curSet: RegexpSet = null;
     let curRange: RegexpRange = null;
@@ -362,6 +363,9 @@ export default class Parser {
             target = next === 'x' ? new RegexpASCII() : (hasFlagU ? new RegexpUnicodeAll() : new RegexpUnicode());
             const matchedNum: number = target.untilEnd(context.slice(i));
             if(matchedNum === 0) {
+              if(hasFlagU) {
+                throw new Error(`invalid unicode code point:${context}`);
+              }
               // not regular unicode,"\uzyaa"
               target = new RegexpIgnore(`\\${next}`);
             } else {
@@ -410,21 +414,31 @@ export default class Parser {
             } else {
               // reference
               if(no.charAt(0) === '0') {
-                target = new RegexpNull();
+                if(no.length === 1) {
+                  target = new RegexpNull();
+                } else {
+                  if(+no.charAt(1) > 7) {
+                    target = new RegexpNull();
+                  } else {
+                    const octal = no.length >= 3 && +no.charAt(2) <= 7 ? no.slice(1, 2) : no.charAt(1);
+                    target = new RegexpOctal(`\\0${octal}`);
+                    i += octal.length;
+                  }
+                }
               } else {
                 i += no.length - 1;
-                target = new RegexpReference(`\\${no}`);
-                const refGroup = captureGroups[+no - 1];
-                refGroups[no] = refGroup;
-                if(refGroup) {
+                if(+no <= captureGroups.length) {
+                  target = new RegexpReference(`\\${no}`);
+                  const refGroup = captureGroups[+no - 1];
+                  refGroups[no] = refGroup;
                   if(refGroup.isAncestorOf(lastGroup)) {
                     target.ref = null;
                   } else {
                     target.ref = refGroup;
                   }
                 } else {
-                  target.ref = null;
-                  target.isMatchNothing = true;
+                  target =  new RegexpRefOrNumber(`\\${no}`);
+                  refOrNumbers.push(target);
                 }
               }
             }
@@ -597,14 +611,14 @@ export default class Parser {
         case s.matchAny:
           target = new RegexpAny();
           break;
-        // match /
-        case s.delimiter:
-          throw new Error(`unexpected pattern end delimiter:"/${nextAll}"`);
         // match ^$
         case s.beginWith:
         case s.endWith:
           target = new RegexpAnchor(char);
           break;
+        // match /
+        case s.delimiter:
+          throw new Error(`unexpected pattern end delimiter:"/${nextAll}"`);
         // default
         default:
           target = new RegexpChar(char);
@@ -645,6 +659,54 @@ export default class Parser {
         }
         queues.push(special);
       }
+    }
+    // parse reference or number
+    if(refOrNumbers.length) {
+      const replace = (lists: RegexpPart[], search: RegexpPart, rep: RegexpPart[]) => {
+        let idx = 0;
+        let finded = false;
+        for(const len = lists.length; idx < len; idx++) {
+          if(search === lists[idx]) {
+            finded = true;
+            break;
+          }
+        }
+        if(finded) {
+          lists.splice(idx, 1, ...rep);
+        }
+      };
+      const refLen = captureGroups.length;
+      refOrNumbers.map((item: RegexpRefOrNumber) => {
+        const strNum = item.input.slice(1);
+        const total = strNum.length;
+        let matchLen = 0;
+        let instance: RegexpPart;
+        if(+strNum <= refLen) {
+          instance = new RegexpReference(item.input);
+          (instance as RegexpReference).ref = null;
+          matchLen = total;
+        } else {
+          if(/^([1-3][0-7]{0,2}|[4-7][0-7]?)/.test(strNum)) {
+            const octal = RegExp.$1;
+            instance = new RegexpOctal(`\\${octal}`);
+            matchLen += octal.length;
+          } else {
+            instance = new RegexpTranslateChar(`\\${strNum.charAt(0)}`);
+            matchLen += 1;
+          }
+        }
+        instance.linkParent = item.parent;
+        const res: RegexpPart[] = [instance];
+        while(matchLen < total) {
+          const curChar = new RegexpChar(strNum.charAt(matchLen++));
+          curChar.linkParent = item.parent;
+          res.push(curChar);
+        }
+        if(item.parent) {
+          replace(item.parent.queues, item, res);
+        }
+        replace(queues, item, res);
+      });
     }
     // if root group,set completed when parse end
     if(queues.length > 1 && queues[1].type === 'group' && (queues[1] as RegexpGroup).isRoot === true) {
@@ -707,19 +769,19 @@ export default class Parser {
   }
 }
 // make charset
-type CharsetType = 'd' | 'w' | 's';
-type CharsetNegatedType = 'D' | 'W' | 'S';
-type CharsetWordType = 'b' | 'B';
-type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
-type CharsetCacheType = CharsetNegatedType | 'DOTALL' | 'ALL';
-type CharsetCache = {
+export type CharsetType = 'd' | 'w' | 's';
+export type CharsetNegatedType = 'D' | 'W' | 'S';
+export type CharsetWordType = 'b' | 'B';
+export type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
+export type CharsetCacheType = CharsetNegatedType | 'DOTALL' | 'ALL';
+export type CharsetCache = {
   [key in CharsetCacheType]?: CodePointResult
 };
-type CodePointRanges = number[][];
-type CodePointData<T> = {
+export type CodePointRanges = number[][];
+export type CodePointData<T> = {
   [key in CharsetType]: T
 };
-interface CodePointResult {
+export interface CodePointResult {
   ranges: CodePointRanges;
   totals: number[];
 }
@@ -757,6 +819,9 @@ export abstract class RegexpPart {
     if(this.type !== 'special') {
       value.add(this);
     }
+  }
+  set linkParent(value: RegexpPart) {
+    this.curParent = value;
   }
   get isComplete() {
     return this.completed;
@@ -1033,6 +1098,16 @@ export class RegexpOctal extends RegexpPart {
   }
 }
 // tslint:disable-next-line:max-classes-per-file
+export class RegexpRefOrNumber extends RegexpPart {
+  public readonly type = 'refornumber';
+  constructor(input: string) {
+    super(input);
+  }
+  protected prebuild(): never {
+    throw new Error(`the "${this.input}" must parse again,either reference or number`);
+  }
+}
+// tslint:disable-next-line:max-classes-per-file
 export abstract class RegexpTimes extends RegexpPart {
   public readonly type = 'times';
   protected readonly maxNum: number = 5;
@@ -1244,6 +1319,9 @@ export abstract class RegexpHexCode extends RegexpOrigin {
       const { $1: all, $2: codePoint } = RegExp;
       const lastCode = codePoint || all;
       this.codePoint = Number(`0x${lastCode}`);
+      if(this.codePoint > 0x10ffff) {
+        throw new Error(`invalid unicode code point:\\u{${lastCode}},can not great than 0x10ffff`);
+      }
       this.input = `\\${codeType}${all}`;
     }
     return 0;
@@ -1256,7 +1334,7 @@ export class RegexpUnicode extends RegexpHexCode {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class RegexpUnicodeAll extends RegexpHexCode {
-  protected rule = /^({([0-9A-Fa-f]{4}|[0-9A-Fa-f]{6})}|[0-9A-Fa-f]{2})/;
+  protected rule = /^({(0*[0-9A-Fa-f]{1,6})}|[0-9A-Fa-f]{4})/;
   protected codeType = 'u';
 }
 // tslint:disable-next-line:max-classes-per-file
@@ -1282,7 +1360,6 @@ export class RegexpGroupItem extends RegexpPart {
     }, '');
   }
   public prebuild(conf: BuildConfData) {
-    console.log('build item', this.min, this.max, this.queues);
     return this.queues.reduce((res, queue: RegexpPart) => {
       let cur: string;
       if(this.isEndLimitChar(queue)) {
