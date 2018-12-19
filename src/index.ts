@@ -216,8 +216,8 @@ const flagsBinary: FlagsBinary = {
   y: 0b100000,
 };
 const flagItems = Object.keys(flagsBinary).join('');
-export const parserRule = new RegExp(`^\/(?:\\\\.|[^\\\\](?!\/)|[^\\\\])+?\/[${flagItems}]*`);
-export const regexpRule = new RegExp(`^\/((?:\\\\.|[^\\\\](?!\/)|[^\\\\])+?)\/([${flagItems}]*)$`);
+export const parserRule = new RegExp(`^\/(?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?\/[${flagItems}]*`);
+export const regexpRule = new RegExp(`^\/((?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?)\/([${flagItems}]*)$`);
 /**
  *
  *
@@ -367,7 +367,7 @@ export default class Parser {
                 throw new Error(`invalid unicode code point:${context}`);
               }
               // not regular unicode,"\uzyaa"
-              target = new RegexpIgnore(`\\${next}`);
+              target = new RegexpTranslateChar(`\\${next}`);
             } else {
               // is unicode,move matchedNum steps
               i += matchedNum;
@@ -385,7 +385,7 @@ export default class Parser {
                 throw new Error(`invalid unicode escape,unexpect control character[${i}]:\\c${code}`);
               }
             } else {
-              if(/\w/.test(code)) {
+              if(/[A-Za-z]/.test(code)) {
                 target = new RegexpControl(code);
                 i++;
               } else {
@@ -564,7 +564,7 @@ export default class Parser {
               target = new RegexpChar(char);
             } else {
               const nextChar = nextAll.charAt(0);
-              if(nextChar === s.setEnd ) {
+              if(nextChar === s.setEnd) {
                 curSet.isComplete = true;
                 curSet = null;
                 i += 1;
@@ -896,7 +896,7 @@ export abstract class RegexpPart {
       if(target === this) {
         return true;
       }
-    } while( target = (target ? target.parent : null));
+    } while(target = (target ? target.parent : null));
     return false;
   }
   // get last input, remove named group's name.e.g
