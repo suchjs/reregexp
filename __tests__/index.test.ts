@@ -2,14 +2,13 @@ import RegexpParser from '../src/index';
 type Rule = RegExp | string;
 const regexpToStr = (rule: Rule): string => {
   if (rule instanceof RegExp) {
-    rule.toString().replace(/\\/g, '\\\\');
+    return rule.toString();
   }
-  return rule as string;
+  return rule;
 };
 const validParser = (rule: Rule) => {
   return () => {
     try {
-      // tslint:disable-next-line:no-unused-expression
       new RegexpParser(regexpToStr(rule));
     } catch (e) {
       throw e;
@@ -85,7 +84,7 @@ describe('Test regexp parser', () => {
         namecap: ['aa', 'bb'],
       },
     });
-    expect(['abbddddddaa', 'abbddddddbb'].indexOf(v1) > -1).toBeTruthy();
+    expect(['abbddddddaa', 'abbddddddbb'].includes(v1)).toBeTruthy();
     const v2: string = validValue('/(?<name>haha)\\k<name>/');
     expect(v2 === 'hahahaha').toBeTruthy();
   });
@@ -95,10 +94,12 @@ describe('Test regexp parser', () => {
     const r3 = /^[^]$/;
     const r4 = /[^\w\W]/;
     const r5 = /[^a-zA-Z0-9_\W]/;
+    const r6 = '/[z-a]/';
     expect(/^[a-z]$/.test(validValue(r1))).toBeTruthy();
     expect(() => validValue(r2)).toThrow();
     expect(validMatch(r3)).toBeTruthy();
     expect(() => validValue(r4)).toThrow();
     expect(() => validValue(r5)).toThrow();
+    expect(validParser(r6)).toThrow();
   });
 });

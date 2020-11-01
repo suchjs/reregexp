@@ -70,15 +70,15 @@ class CharsetHelper {
   // big code point character
   public static readonly bigCharPoint: number[] = [0x10000, 0x10ffff];
   public static readonly bigCharTotal: number = 0x10ffff - 0x10000 + 1;
-  //
+  // match '.'
   public static charsetOfAll(): CodePointResult {
     return CharsetHelper.charsetOfNegated('ALL');
   }
-  //
+  // match '.' with s flag
   public static charsetOfDotall(): CodePointResult {
     return CharsetHelper.charsetOfNegated('DOTALL');
   }
-  //
+  // get negated charset
   public static charsetOfNegated(type: CharsetCacheType): CodePointResult {
     const { points, cache } = CharsetHelper;
     if (cache[type]) {
@@ -142,7 +142,7 @@ class CharsetHelper {
       totals: lens[type],
     };
   }
-  //
+  // get charset ranges
   public static getCharsetInfo(
     type: CharsetType | CharsetNegatedType | '.',
     flags: FlagsHash = {},
@@ -212,7 +212,7 @@ class CharsetHelper {
   }
 }
 const charH = CharsetHelper;
-const symbols: NormalObject = {
+const symbols: NormalObject<string> = {
   beginWith: '^',
   endWith: '$',
   matchAny: '.',
@@ -289,7 +289,7 @@ export default class Parser {
       throw new Error('the build method does not support lookarounds.');
     }
     const nullRootError = new Error(
-      'the regexp has null expression,will match nothing',
+      'the regexp has null expression, will match nothing',
     );
     if (this.hasNullRoot === true) {
       throw nullRootError;
@@ -987,7 +987,7 @@ export abstract class RegexpPart {
   public untilEnd(_context: string): number | void {
     // will override by sub class
   }
-  // abstract
+  // set data conf
   public setDataConf(_conf: BuildConfData, _result: string): void {
     // will override by sub class
   }
@@ -1013,7 +1013,7 @@ export abstract class RegexpPart {
       return this.input;
     }
   }
-  //
+  // build rule input from queues.
   protected buildRuleInputFromQueues(): string {
     return this.queues.reduce((result: string, next: RegexpPart) => {
       return result + next.getRuleInput();
@@ -1315,8 +1315,6 @@ export class RegexpSet extends RegexpPart {
     );
   }
   protected prebuild(conf: BuildConfData): string {
-    const { queues } = this;
-    const index = makeRandom(0, queues.length - 1);
     if (this.isMatchAnything) {
       return new RegexpAny().build(conf);
     }
@@ -1325,15 +1323,16 @@ export class RegexpSet extends RegexpPart {
       console.warn('the empty set will match nothing:[]');
       return '';
     }
+    const { queues } = this;
     if (this.reverse) {
-      // reverse
+      // with begin ^, reverse the sets
       if (!this.codePointResult) {
         if (
           queues.length === 1 &&
           queues[0].type === 'charset' &&
-          ['w', 's', 'd'].indexOf(
+          ['w', 's', 'd'].includes(
             (queues[0] as RegexpCharset).charset.toLowerCase(),
-          ) > -1
+          )
         ) {
           const charCode =
             (queues[0] as RegexpCharset).charset.charCodeAt(0) ^ 0b100000;
@@ -1413,6 +1412,7 @@ export class RegexpSet extends RegexpPart {
       }
       return charH.makeOne(this.codePointResult);
     }
+    const index = makeRandom(0, queues.length - 1);
     return this.queues[index].build(conf) as string;
   }
 }
