@@ -1,9 +1,14 @@
 # node modules
-node_modules
+node_modules/
+
 # vscode
 .vscode/*
+
 # build 
 /src/local
+
+# system temp files
 .DS_Store*
-yarn.lock
+
+# use yarn
 package-lock.json

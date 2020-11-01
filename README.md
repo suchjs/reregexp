@@ -2,7 +2,9 @@
 
 [![npm version](https://badge.fury.io/js/reregexp.svg)](https://badge.fury.io/js/reregexp)&nbsp;&nbsp;[![Build Status](https://travis-ci.org/suchjs/reregexp.svg?branch=master)](https://travis-ci.org/suchjs/reregexp)
 
-reverse analysis regexp,parse to ast,get a string match it.
+Parse a regular expression to rule parts, and build a string from it.You can use it to mock a string from a regex.
+
+reregexp 主要用来解析正则表达式，从正则表达式mock出一个相匹配的字符串。
 
 ## How to use
 ```bash

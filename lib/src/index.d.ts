@@ -1,5 +1,5 @@
-export interface NormalObject {
-    [index: string]: any;
+export interface NormalObject<T = unknown> {
+    [index: string]: T;
 }
 export declare type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's';
 export declare type FlagsHash = {
@@ -9,15 +9,18 @@ export declare type FlagsBinary = {
     [key in Flag]: number;
 };
 export interface ParserConf {
-    namedGroupConf?: NormalObject;
+    namedGroupConf?: NormalObject<string[] | boolean>;
 }
 export interface BuildConfData extends ParserConf {
     flags: FlagsHash;
-    namedGroupData: NormalObject;
-    captureGroupData: NormalObject;
+    namedGroupData: NormalObject<string>;
+    captureGroupData: NormalObject<string>;
     beginWiths: string[];
     endWiths: string[];
 }
+export declare type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'flags'> & {
+    queues: RegexpPart[];
+};
 export declare const parserRule: RegExp;
 export declare const regexpRule: RegExp;
 export default class Parser {
@@ -36,13 +39,7 @@ export default class Parser {
     constructor(rule: string, config?: ParserConf);
     setConfig(conf: ParserConf): void;
     build(): string | never;
-    info(): {
-        rule: string;
-        context: string;
-        lastRule: string;
-        flags: Flag[];
-        queues: RegexpPart[];
-    };
+    info(): Result;
     private parse;
     private checkFlags;
     private hasFlag;
@@ -74,25 +71,28 @@ export declare abstract class RegexpPart {
     abstract readonly type: string;
     protected min: number;
     protected max: number;
-    protected dataConf: NormalObject;
+    protected dataConf: Partial<BuildConfData>;
     protected buildForTimes: boolean;
     protected curParent: RegexpPart;
     protected matchNothing: boolean;
     protected completed: boolean;
     constructor(input?: string);
-    parent: RegexpPart;
-    linkParent: RegexpPart;
-    isComplete: boolean;
-    isMatchNothing: boolean;
+    get parent(): RegexpPart;
+    set parent(value: RegexpPart);
+    set linkParent(value: RegexpPart);
+    get isComplete(): boolean;
+    set isComplete(value: boolean);
+    get isMatchNothing(): boolean;
+    set isMatchNothing(value: boolean);
     setRange(options: NumberRange): void;
     add(target: RegexpPart | RegexpPart[]): void;
     pop(): RegexpPart;
     build(conf: BuildConfData): string | never;
-    setDataConf(conf: BuildConfData, result: string): void;
+    untilEnd(_context: string): number | void;
+    setDataConf(_conf: BuildConfData, _result: string): void;
     toString(): string;
-    untilEnd(context: string): void;
     isAncestorOf(target: RegexpPart): boolean;
-    getRuleInput(parseReference?: boolean): string;
+    getRuleInput(_parseReference?: boolean): string;
     protected buildRuleInputFromQueues(): string;
     protected prebuild(conf: BuildConfData): string | never;
 }
@@ -108,7 +108,7 @@ export declare class RegexpReference extends RegexpPart {
     ref: RegexpGroup | null;
     index: number;
     constructor(input: string, name?: string);
-    protected prebuild(conf: BuildConfData): any;
+    protected prebuild(conf: BuildConfData): string;
 }
 export declare class RegexpSpecial extends RegexpEmpty {
     readonly special: string;
@@ -189,7 +189,7 @@ export declare abstract class RegexpTimes extends RegexpPart {
     protected minRepeat: number;
     protected maxRepeat: number;
     constructor();
-    target: RegexpPart;
+    set target(target: RegexpPart);
     untilEnd(context: string): number;
     abstract parse(): void;
 }
@@ -207,7 +207,8 @@ export declare class RegexpSet extends RegexpPart {
     private isMatchAnything;
     private codePointResult;
     constructor();
-    isComplete: boolean;
+    get isComplete(): boolean;
+    set isComplete(value: boolean);
     isSetStart(): boolean;
     getRuleInput(): string;
     protected prebuild(conf: BuildConfData): string;
@@ -215,7 +216,7 @@ export declare class RegexpSet extends RegexpPart {
 export declare class RegexpRange extends RegexpPart {
     readonly type = "range";
     constructor();
-    add(target: RegexpPart): void;
+    add(target: RegexpPart): void | never;
     getRuleInput(): string;
     protected prebuild(): string;
 }
@@ -254,12 +255,13 @@ export declare class RegexpGroup extends RegexpPart {
     private curGroupItem;
     private curRule;
     constructor();
-    isComplete: boolean;
+    get isComplete(): boolean;
+    set isComplete(value: boolean);
     getCurGroupItem(): RegexpGroupItem;
     addNewGroup(): RegexpGroupItem;
     addRootItem(target: RegexpPart[]): void;
     addItem(target: RegexpPart): void;
     getRuleInput(parseReference?: boolean): string;
-    protected buildRule(flags: FlagsHash): any;
+    protected buildRule(flags: FlagsHash): RegExp | null;
     protected prebuild(conf: BuildConfData): string;
 }

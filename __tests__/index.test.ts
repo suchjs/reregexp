@@ -1,7 +1,7 @@
 import RegexpParser from '../src/index';
-type  Rule = RegExp | string;
+type Rule = RegExp | string;
 const regexpToStr = (rule: Rule): string => {
-  if(rule instanceof RegExp) {
+  if (rule instanceof RegExp) {
     rule.toString().replace(/\\/g, '\\\\');
   }
   return rule as string;
@@ -11,7 +11,7 @@ const validParser = (rule: Rule) => {
     try {
       // tslint:disable-next-line:no-unused-expression
       new RegexpParser(regexpToStr(rule));
-    } catch(e) {
+    } catch (e) {
       throw e;
     }
     return true;
@@ -22,12 +22,15 @@ const validMatch = (rule: RegExp) => {
     rule.test(new RegexpParser(regexpToStr(rule)).build());
   };
 };
-const validValue = (rule: Rule, conf: {
-  namedGroupConf?: {[index: string]: any},
-} = {}) => {
-  return (new RegexpParser(regexpToStr(rule), conf)).build();
+const validValue = (
+  rule: Rule,
+  conf: {
+    namedGroupConf?: { [index: string]: any };
+  } = {},
+) => {
+  return new RegexpParser(regexpToStr(rule), conf).build();
 };
-describe('test regexp parser', () => {
+describe('Test regexp parser', () => {
   test('test normal patterns', () => {
     expect(validParser('//')).toThrow();
     expect(validParser('/a/ii')).toThrow();
