@@ -8,11 +8,14 @@ module.exports = {
     '<rootDir>/lib/',
     '<rootDir>/dist/',
     '<rootDir>/node_modules/',
-    '<rootDir>/src/',
+    '<rootDir>/local/',
   ],
-  coverageDirectory: '<rootDir>/',
+  coverageDirectory: '<rootDir>/coverage',
+  collectCoverage: true,
+  collectCoverageFrom: ['src/**/*.{ts,js}', '!<rootDir>/node_modules/'],
   moduleFileExtensions: ['ts', 'js'],
   moduleNameMapper: {
     '^@/(.*)': '<rootDir>/src/$1',
   },
+  rootDir: '.',
 };

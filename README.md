@@ -25,7 +25,7 @@ parser.build();
 ## API
 `.build()` build a string that match the regexp.
 
-`.info()` get an regexp parse queues,flags,lastRule after remove named captures.
+`.info()` get a regexp parsed queues, flags, lastRule after remove named captures.
 ```javascript
 {
   rule: '',

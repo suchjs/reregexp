@@ -5,7 +5,8 @@ node_modules/
 .vscode/*
 
 # build 
-/src/local
+/local
+/coverage
 
 # system temp files
 .DS_Store*
