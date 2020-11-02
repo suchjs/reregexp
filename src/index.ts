@@ -245,10 +245,10 @@ const flagsBinary: FlagsBinary = {
 };
 const flagItems = Object.keys(flagsBinary).join('');
 export const parserRule = new RegExp(
-  `^\/(?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?\/[${flagItems}]*`,
+  `^\\/(?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?\/[${flagItems}]*`,
 );
 export const regexpRule = new RegExp(
-  `^\/((?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?)\/([${flagItems}]*)$`,
+  `^\\/((?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?)\\/([${flagItems}]*)$`,
 );
 /**
  *
@@ -1463,6 +1463,7 @@ export abstract class RegexpHexCode extends RegexpOrigin {
         );
       }
       this.input = `\\${codeType}${all}`;
+      return all.length;
     }
     return 0;
   }

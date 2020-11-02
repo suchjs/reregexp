@@ -102,4 +102,11 @@ describe('Test regexp parser', () => {
     expect(() => validValue(r5)).toThrow();
     expect(validParser(r6)).toThrow();
   });
+
+  test('test unicode', () => {
+    const r1 = /\u{0061}/;
+    const r2 = /\u{61}/u;
+    expect(validMatch(r1)).toBeTruthy();
+    expect(validMatch(r2)).toBeTruthy();
+  });
 });
