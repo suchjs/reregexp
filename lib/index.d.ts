@@ -8,8 +8,9 @@ export declare type FlagsHash = {
 export declare type FlagsBinary = {
     [key in Flag]: number;
 };
+export declare type NamedGroupConf<T = never> = NormalObject<string[] | T>;
 export interface ParserConf {
-    namedGroupConf?: NormalObject<string[] | boolean>;
+    namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
 }
 export interface BuildConfData extends ParserConf {
     flags: FlagsHash;
@@ -24,7 +25,7 @@ export declare type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'fla
 export declare const parserRule: RegExp;
 export declare const regexpRule: RegExp;
 export default class Parser {
-    readonly rule: string;
+    readonly rule: string | RegExp;
     private config;
     readonly context: string;
     readonly flags: Flag[];
@@ -36,7 +37,7 @@ export default class Parser {
     private rootQueues;
     private hasLookaround;
     private hasNullRoot;
-    constructor(rule: string, config?: ParserConf);
+    constructor(rule: string | RegExp, config?: ParserConf);
     setConfig(conf: ParserConf): void;
     build(): string | never;
     info(): Result;
@@ -257,7 +258,6 @@ export declare class RegexpGroup extends RegexpPart {
     constructor();
     get isComplete(): boolean;
     set isComplete(value: boolean);
-    getCurGroupItem(): RegexpGroupItem;
     addNewGroup(): RegexpGroupItem;
     addRootItem(target: RegexpPart[]): void;
     addItem(target: RegexpPart): void;
