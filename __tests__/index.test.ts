@@ -11,12 +11,11 @@ const validParser = (rule: Rule) => {
   };
 };
 const validMatch = (rule: RegExp) => {
-  return () => {
-    rule.test(new RegexpParser(rule).build());
-  };
+  return rule.test(new RegexpParser(rule).build());
 };
 const validValue = (rule: Rule, conf: ParserConf = {}) => {
-  return new RegexpParser(rule, conf).build();
+  const re = new RegexpParser(rule, conf);
+  return re.build();
 };
 const validInput = (rule: Rule): boolean => {
   return (
@@ -25,7 +24,8 @@ const validInput = (rule: Rule): boolean => {
   );
 };
 const mustIn = (values: string[], rule: Rule): boolean => {
-  for (let i = 0, j = 20; i < j; i++) {
+  const runTimes = 50;
+  for (let i = 0, j = runTimes; i < j; i++) {
     const value = validValue(rule);
     if (!values.includes(value)) return false;
   }
@@ -101,10 +101,12 @@ describe('Test regexp parser', () => {
     expect(/^[a-z]$/.test(validValue(r1))).toBeTruthy();
     expect(() => validValue(r2)).toThrow();
     expect(validMatch(r3)).toBeTruthy();
+    // jest test case error.
     expect(() => validValue(r4)).toThrow();
     expect(() => validValue(r5)).toThrow();
     expect(validParser(r6)).toThrow();
     expect(validValue(r7)).toBeTruthy();
+    expect(validValue(/[\8]/)).toBeTruthy();
     // control character
     const r8 = /[\ca]/;
     expect(validValue(r8)).toBeTruthy();
@@ -114,13 +116,17 @@ describe('Test regexp parser', () => {
     // hex
     const r10 = /[\x61-\x99]/;
     expect(validValue(r10)).toBeTruthy();
+    // backspace
+    expect(validValue(/[\b]/)).toEqual('\u{0008}');
   });
 
   test('test unicode', () => {
     const r1 = /\u{0061}/;
     const r2 = /\u{61}/u;
     expect(validMatch(r1)).toBeTruthy();
-    expect(validMatch(r2)).toBeTruthy();
+    expect(mustIn(['a', '\\u{61}'], r2)).toBeTruthy();
+    const r3 = /[\u{0061}-\u{0099}]/u;
+    expect(validMatch(r3)).toBeTruthy();
   });
 
   // groups
@@ -137,6 +143,7 @@ describe('Test regexp parser', () => {
     const r10 = /(d)(a|b|c|\1)/;
     expect(validMatch(r1)).toBeTruthy();
     expect(validInput(r1)).toBeTruthy();
+    expect(validValue(r1)).toEqual('a');
     expect(validMatch(r2)).toBeTruthy();
     expect(validValue(r2)).toEqual('aa');
     expect(() =>
@@ -175,6 +182,7 @@ describe('Test regexp parser', () => {
     ).toThrow();
     // nested
     expect(validValue(r4)).toEqual('ababa');
+    expect(validInput(r4)).toBeTruthy();
     // nested group item
     expect(mustIn(['ababa', 'cc'], r5)).toBeTruthy();
     // no capture group
@@ -208,11 +216,53 @@ describe('Test regexp parser', () => {
     //
     const r16 = /(a)\08/;
     expect(validMatch(r16)).toBeTruthy();
+    //
+    expect(validMatch(/(^a|b|c$)/)).toBeTruthy();
   });
 
   // build
   test('test not supported', () => {
     const r1 = /^abc$/;
     expect(validMatch(r1)).toBeTruthy();
+  });
+
+  // flags
+  test('test flags', () => {
+    const r1 = /a/i;
+    expect(mustIn(['a', 'A'], r1)).toBeTruthy();
+    const r2 = /a/gimsuy;
+    expect(mustIn(['a', 'A'], r2)).toBeTruthy();
+    expect(validParser('/a/imguysi')).toThrow();
+  });
+
+  // special
+  test('test special', () => {
+    // .
+    expect(validMatch(/./)).toBeTruthy();
+    expect(/./s.test(validValue(/./s))).toBeTruthy();
+    // \b
+    expect(validValue(/a\bb/)).toEqual('ab');
+    // \w \d
+    expect(validMatch(/\w/)).toBeTruthy();
+    expect(validMatch(/\W/)).toBeTruthy();
+    expect(validMatch(/\d/)).toBeTruthy();
+    expect(validMatch(/\D/)).toBeTruthy();
+    expect(validMatch(/\s/)).toBeTruthy();
+    expect(validMatch(/\S/)).toBeTruthy();
+    // expect(validMatch(/\t/)).toBeTruthy();
+    expect(validMatch(/\r/)).toBeTruthy();
+    expect(validMatch(/\n/)).toBeTruthy();
+    expect(validMatch(/\f/)).toBeTruthy();
+    expect(validMatch(/\v/)).toBeTruthy();
+    //
+  });
+  //
+  test('test quantifiers', () => {
+    expect(validMatch(/a?/)).toBeTruthy();
+    expect(validMatch(/a??/)).toBeTruthy();
+    expect(validMatch(/a*/)).toBeTruthy();
+    expect(validMatch(/a*?/)).toBeTruthy();
+    expect(validMatch(/a+/)).toBeTruthy();
+    expect(validMatch(/a+?/)).toBeTruthy();
   });
 });

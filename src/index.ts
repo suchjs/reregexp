@@ -113,8 +113,9 @@ class CharsetHelper {
             ? [[0x000a], [0x000d], [0x2028, 0x2029]]
             : points[type.toLowerCase() as CharsetType];
         const specialNum = type === 'S' ? 1 : 0;
-        while (start <= max && excepts.length > specialNum) {
-          const [begin, end] = excepts.shift();
+        let total = excepts.length;
+        while (start <= max && total > specialNum) {
+          const [begin, end] = excepts[--total];
           add(start, begin - 1);
           start = (end || begin) + 1;
         }
@@ -299,11 +300,9 @@ export default class Parser {
     if (this.hasLookaround) {
       throw new Error('the build method does not support lookarounds.');
     }
-    const nullRootError = new Error(
-      'the regexp has null expression, will match nothing',
-    );
+    const nullRootError = 'the regexp has null expression, will match nothing';
     if (this.hasNullRoot === true) {
-      throw nullRootError;
+      throw new Error(nullRootError);
     }
     const { rootQueues } = this;
     const conf: BuildConfData = {
@@ -320,7 +319,7 @@ export default class Parser {
     if (this.hasNullRoot === null) {
       if (rootQueues.filter((item) => item.isMatchNothing).length) {
         this.hasNullRoot = true;
-        throw nullRootError;
+        throw new Error(nullRootError);
       } else {
         this.hasNullRoot = false;
       }
@@ -1179,7 +1178,7 @@ export class RegexpCharset extends RegexpPart {
 export class RegexpPrint extends RegexpPart {
   public readonly type = 'print';
   protected prebuild(): string {
-    return this.input;
+    return new Function('', `return '${this.input}'`)();
   }
 }
 
