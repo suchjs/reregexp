@@ -1,12 +1,10 @@
 language: node_js
 install:
   - yarn
+os:
+  - 'linux'
 node_js:
-  - '11'
   - '12'
-  - '13'
-  - '14'
-sudo: false
 script:
   - 'npm test'
 after_script:

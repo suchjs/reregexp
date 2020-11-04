@@ -26,8 +26,9 @@ export type FlagsHash = {
 export type FlagsBinary = {
   [key in Flag]: number;
 };
+export type NamedGroupConf<T = never> = NormalObject<string[] | T>;
 export interface ParserConf {
-  namedGroupConf?: NormalObject<string[] | boolean>;
+  namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
 }
 export interface BuildConfData extends ParserConf {
   flags: FlagsHash;
@@ -250,6 +251,7 @@ export const parserRule = new RegExp(
 export const regexpRule = new RegExp(
   `^\\/((?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?)\\/([${flagItems}]*)$`,
 );
+const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
 /**
  *
  *
@@ -267,17 +269,26 @@ export default class Parser {
   private rootQueues: RegexpPart[] = [];
   private hasLookaround = false;
   private hasNullRoot: boolean = null;
-  constructor(public readonly rule: string, private config: ParserConf = {}) {
-    if (regexpRule.test(rule)) {
-      this.rule = rule;
-      this.context = RegExp.$1;
-      this.flags = RegExp.$2 ? (RegExp.$2.split('') as Flag[]) : [];
-      this.checkFlags();
-      this.parse();
-      this.lastRule = this.ruleInput;
+  constructor(
+    public readonly rule: string | RegExp,
+    private config: ParserConf = {},
+  ) {
+    if (rule instanceof RegExp) {
+      this.rule = rule.toString();
+      this.context = rule.source;
+      this.flags = rule.flags.split('') as Flag[];
     } else {
-      throw new Error(`wrong regexp:${rule}`);
+      if (regexpRule.test(rule)) {
+        this.rule = rule;
+        this.context = RegExp.$1;
+        this.flags = RegExp.$2 ? (RegExp.$2.split('') as Flag[]) : [];
+      } else {
+        throw new Error(`wrong regexp:${rule}`);
+      }
     }
+    this.checkFlags();
+    this.parse();
+    this.lastRule = this.ruleInput;
   }
   // set configs
   public setConfig(conf: ParserConf): void {
@@ -473,7 +484,7 @@ export default class Parser {
             const no = RegExp.$1;
             if (curSet) {
               // in set, "\" + \d will parse as octal,max 0377
-              if (/^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/.test(no)) {
+              if (octalRule.test(no)) {
                 const octal = RegExp.$1;
                 target = new RegexpOctal(`\\${octal}`);
                 i += octal.length - 1;
@@ -484,14 +495,17 @@ export default class Parser {
               // reference
               if (no.charAt(0) === '0') {
                 if (no.length === 1) {
+                  // \0
                   target = new RegexpNull();
                 } else {
                   if (+no.charAt(1) > 7) {
+                    // \08 \09
                     target = new RegexpNull();
                   } else {
+                    // \01
                     const octal =
                       no.length >= 3 && +no.charAt(2) <= 7
-                        ? no.slice(1, 2)
+                        ? no.slice(1, 3)
                         : no.charAt(1);
                     target = new RegexpOctal(`\\0${octal}`);
                     i += octal.length;
@@ -509,6 +523,7 @@ export default class Parser {
                     target.ref = refGroup;
                   }
                 } else {
+                  // may be reference, or octal number, or digits
                   target = new RegexpRefOrNumber(`\\${no}`);
                   refOrNumbers.push(target);
                 }
@@ -832,7 +847,11 @@ export default class Parser {
       return;
     }
     if (len > Object.keys(flagsBinary).length) {
-      throw new Error(`the rule has repeat flag,please check.`);
+      throw new Error(
+        `The rule may has repeated or unrecognized flags<got '${flags.join(
+          '',
+        )}'>, please check.`,
+      );
     }
     const first = flags[0];
     let totalFlagBinary = flagsBinary[first];
@@ -1060,7 +1079,9 @@ export class RegexpReference extends RegexpPart {
     } else {
       const { captureIndex } = ref as RegexpGroup;
       const { captureGroupData } = conf;
-      return captureGroupData[captureIndex] as string;
+      return captureGroupData.hasOwnProperty(captureIndex)
+        ? captureGroupData[captureIndex]
+        : '';
     }
   }
 }
@@ -1552,10 +1573,6 @@ export class RegexpGroup extends RegexpPart {
       });
     }
   }
-  // get current group item
-  public getCurGroupItem(): RegexpGroupItem {
-    return this.curGroupItem;
-  }
   // add a new group item
   public addNewGroup(): RegexpGroupItem {
     const { queues } = this;
@@ -1608,30 +1625,27 @@ export class RegexpGroup extends RegexpPart {
     const groupsLen = groups.length;
     const filterGroups: RegexpGroupItem[] = (() => {
       let curGroups: RegexpGroupItem[] = [];
-      if (captureName && captureName.includes(':') && namedGroupConf) {
-        const segs = captureName.split(':');
+      // special build logic, /(?<named_a_b_c_d>a|b|c|d)\k<named_a_b_c_d>/
+      if (captureName && captureName.includes('_') && namedGroupConf) {
+        const segs = captureName.split('_');
         if (segs.length === groupsLen) {
-          const notInIndexs: number[] = [];
-          const inIndexs: number[] = [];
-          segs.forEach((key: string, index: number) => {
-            if (typeof namedGroupConf[key] === 'boolean') {
-              (namedGroupConf[key] === true ? inIndexs : notInIndexs).push(
-                index,
-              );
-            }
-          });
-          let lastIndexs: number[] = [];
-          if (inIndexs.length) {
-            lastIndexs = inIndexs;
-          } else if (notInIndexs.length && notInIndexs.length < groupsLen) {
-            for (let i = 0; i < groupsLen; i++) {
-              if (!notInIndexs.includes(i)) {
-                lastIndexs.push(i);
+          const lastIndexs: number[] = [];
+          if (typeof namedGroupConf[captureName] === 'object') {
+            const conf = namedGroupConf[captureName] as NamedGroupConf<boolean>;
+            segs.forEach((key: string, index: number) => {
+              if (typeof conf[key] === 'boolean' && conf[key] === false) {
+                // ignore current group
+              } else {
+                lastIndexs.push(index);
               }
-            }
+            });
           }
           if (lastIndexs.length) {
             curGroups = lastIndexs.map((index) => groups[index]);
+          } else {
+            throw new Error(
+              `the specified named group '${captureName}' are all filtered by the config.`,
+            );
           }
         }
       }

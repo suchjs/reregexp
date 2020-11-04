@@ -1,6 +1,6 @@
 {
   "name": "reregexp",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "parse a regular expression to rule parts,mock a string match it.",
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",
