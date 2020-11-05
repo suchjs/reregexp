@@ -149,7 +149,6 @@ class CharsetHelper {
     type: CharsetType | CharsetNegatedType | '.',
     flags: FlagsHash = {},
   ): CodePointResult {
-    let result: CodePointResult;
     let last: CodePointResult;
     const helper = CharsetHelper;
     if (['w', 'd', 's'].includes(type)) {
@@ -157,19 +156,21 @@ class CharsetHelper {
     } else {
       if (type === '.') {
         if (flags.s) {
-          result = helper.charsetOfDotall();
+          last = helper.charsetOfDotall();
         } else {
-          result = helper.charsetOfAll();
+          last = helper.charsetOfAll();
         }
       } else {
-        result = helper.charsetOfNegated(type as CharsetNegatedType);
+        last = helper.charsetOfNegated(type as CharsetNegatedType);
       }
       if (flags.u) {
-        last.ranges = result.ranges.slice(0).concat([helper.bigCharPoint]);
-        last.totals = result.totals.slice(0).concat(helper.bigCharTotal);
+        last.ranges = last.ranges
+          .slice(0)
+          .concat([helper.bigCharPoint.slice(0)]);
+        last.totals = last.totals.slice(0).concat(helper.bigCharTotal);
       }
     }
-    return last || result;
+    return last;
   }
   // make the type
   public static make(
@@ -300,11 +301,8 @@ export default class Parser {
     if (this.hasLookaround) {
       throw new Error('the build method does not support lookarounds.');
     }
-    const nullRootError = 'the regexp has null expression, will match nothing';
-    if (this.hasNullRoot === true) {
-      throw new Error(nullRootError);
-    }
     const { rootQueues } = this;
+    let result = '';
     const conf: BuildConfData = {
       ...this.config,
       flags: this.flagsHash,
@@ -313,16 +311,19 @@ export default class Parser {
       beginWiths: [],
       endWiths: [],
     };
-    const result = rootQueues.reduce((res, queue) => {
-      return res + queue.build(conf);
-    }, '');
-    if (this.hasNullRoot === null) {
-      if (rootQueues.filter((item) => item.isMatchNothing).length) {
-        this.hasNullRoot = true;
-        throw new Error(nullRootError);
-      } else {
-        this.hasNullRoot = false;
-      }
+    const nullRootErr = 'the regexp has null expression, will match nothing';
+    if (this.hasNullRoot === true) {
+      throw new Error(nullRootErr);
+    } else {
+      this.hasNullRoot = rootQueues.some((queue) => {
+        // first build, isMatchNothing is depend on 'build' method
+        result += queue.build(conf);
+        if (queue.isMatchNothing) {
+          return true;
+        }
+        return false;
+      });
+      if (this.hasNullRoot) throw new Error(nullRootErr);
     }
     return result;
   }
@@ -1180,10 +1181,6 @@ export class RegexpPrint extends RegexpPart {
   protected prebuild(): string {
     return new Function('', `return '${this.input}'`)();
   }
-}
-
-export class RegexpIgnore extends RegexpEmpty {
-  public readonly type = 'ignore';
 }
 
 export class RegexpAnchor extends RegexpEmpty {

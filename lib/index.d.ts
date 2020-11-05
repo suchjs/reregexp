@@ -155,9 +155,6 @@ export declare class RegexpPrint extends RegexpPart {
     readonly type = "print";
     protected prebuild(): string;
 }
-export declare class RegexpIgnore extends RegexpEmpty {
-    readonly type = "ignore";
-}
 export declare class RegexpAnchor extends RegexpEmpty {
     readonly type = "anchor";
     anchor: string;
