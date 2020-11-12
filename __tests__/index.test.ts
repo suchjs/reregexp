@@ -287,4 +287,27 @@ describe('Test regexp parser', () => {
     expect(validMatch(/\f/)).toBeTruthy();
     expect(validMatch(/\v/)).toBeTruthy();
   });
+  // test max repeat times
+  test('test max repeat', () => {
+    RegexpParser.maxRepeat = 10;
+    expect(
+      Array.from({
+        length: 10,
+      }).every(() => {
+        return validValue(/a*/).length <= 10;
+      }),
+    ).toBeTruthy();
+
+    expect(
+      Array.from({
+        length: 10,
+      }).every(() => {
+        return (
+          validValue(/a*/, {
+            maxRepeat: 20,
+          }).length <= 20
+        );
+      }),
+    ).toBeTruthy();
+  });
 });

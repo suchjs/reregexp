@@ -28,6 +28,7 @@ export type FlagsBinary = {
 };
 export type NamedGroupConf<T = never> = NormalObject<string[] | T>;
 export interface ParserConf {
+  maxRepeat?: number;
   namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
 }
 export interface BuildConfData extends ParserConf {
@@ -250,9 +251,11 @@ const flagItems = Object.keys(flagsBinary).join('');
 export const parserRule = new RegExp(
   `^\\/(?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?\/[${flagItems}]*`,
 );
+const regexpRuleContext = `((?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?)`;
 export const regexpRule = new RegExp(
-  `^\\/((?:\\\\.|\\[[^\\]]*\\]|[^\\/])+?)\\/([${flagItems}]*)$`,
+  `^\\/${regexpRuleContext}\\/([${flagItems}]*)$`,
 );
+const regexpNoFlagsRule = new RegExp(`^${regexpRuleContext}$`);
 const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
 /**
  *
@@ -261,6 +264,7 @@ const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
  * @class Parser
  */
 export default class Parser {
+  public static maxRepeat = 5;
   public readonly context: string = '';
   public readonly flags: Flag[] = [];
   public readonly lastRule: string = '';
@@ -280,7 +284,7 @@ export default class Parser {
       this.context = rule.source;
       this.flags = rule.flags.split('') as Flag[];
     } else {
-      if (regexpRule.test(rule)) {
+      if (regexpRule.test(rule) || regexpNoFlagsRule.test(rule)) {
         this.rule = rule;
         this.context = RegExp.$1;
         this.flags = RegExp.$2 ? (RegExp.$2.split('') as Flag[]) : [];
@@ -680,7 +684,9 @@ export default class Parser {
           target =
             char === s.multipleBegin
               ? new RegexpTimesMulti()
-              : new RegexpTimesQuantifiers();
+              : new RegexpTimesQuantifiers(
+                  ...(this.config.maxRepeat ? [this.config.maxRepeat] : []),
+                );
           const num = target.untilEnd(context.slice(i - 1));
           if (num > 0) {
             const type =
@@ -1238,7 +1244,7 @@ export class RegexpRefOrNumber extends RegexpPart {
 
 export abstract class RegexpTimes extends RegexpPart {
   public readonly type = 'times';
-  protected readonly maxNum: number = 5;
+  protected readonly maxNum: number = Parser.maxRepeat;
   protected greedy = true;
   protected abstract readonly rule: RegExp;
   protected minRepeat = 0;
@@ -1282,6 +1288,9 @@ export class RegexpTimesMulti extends RegexpTimes {
 
 export class RegexpTimesQuantifiers extends RegexpTimes {
   protected rule = /^(\*\?|\+\?|\?\?|\*|\+|\?)/;
+  constructor(protected readonly maxNum: number = Parser.maxRepeat) {
+    super();
+  }
   public parse(): void {
     const all = RegExp.$1;
     this.greedy = all.length === 1;
