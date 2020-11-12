@@ -49,12 +49,12 @@ class CharsetHelper {
     w: [[48, 57], [65, 90], [95], [97, 122]], // 0-9, A-Z, _, a-z
     // whitespaces, see the wiki below:
     // https://en.wikipedia.org/wiki/Whitespace_character
+    // https://github.com/microsoft/ChakraCore/issues/2120  [0x18e0] not in \s
     s: [
-      [0x0009, 0x000c],
+      [0x0009, 0x000d],
       [0x0020],
       [0x00a0],
       [0x1680],
-      [0x180e],
       [0x2000, 0x200a],
       [0x2028, 0x2029],
       [0x202f],
@@ -67,7 +67,7 @@ class CharsetHelper {
   public static readonly lens: CodePointData<number[]> = {
     d: [10],
     w: [10, 36, 37, 63],
-    s: [4, 5, 6, 7, 8, 18, 20, 21, 22, 23, 24],
+    s: [5, 6, 7, 8, 18, 20, 21, 22, 23, 24],
   };
   // big code point character
   public static readonly bigCharPoint: number[] = [0x10000, 0x10ffff];
@@ -97,10 +97,8 @@ class CharsetHelper {
         const num = end - begin + 1;
         if (num <= 0) {
           return;
-        } else if (num === 1) {
-          ranges.push([begin]);
         } else {
-          ranges.push([begin, end]);
+          ranges.push(num > 1 ? [begin, end] : [begin]);
         }
         total += num;
         totals.push(total);
@@ -592,18 +590,13 @@ export default class Parser {
         case s.groupEnd:
           if (nestQueues.length) {
             const curNest = nestQueues.pop();
-            if (!curNest || !['group', 'lookaround'].includes(curNest.type)) {
-              throw new Error(`unexpected capture end.`);
-            }
             const last = (curNest.type === 'group'
               ? groups
               : lookarounds
             ).pop();
-            if (last) {
-              last.isComplete = true;
-              special = new RegexpSpecial(`${curNest.type}End`);
-              special.parent = last;
-            }
+            last.isComplete = true;
+            special = new RegexpSpecial(`${curNest.type}End`);
+            special.parent = last;
           } else {
             throw new Error(`unmatched ${char},you mean "\\${char}"?`);
           }
@@ -1619,7 +1612,7 @@ export class RegexpGroup extends RegexpPart {
     } else {
       const rule = this.getRuleInput(true);
       const flag = Object.keys(flags).join('');
-      return new Function('', `return /^${rule}$/${flag}`)();
+      return (this.curRule = new Function('', `return /^${rule}$/${flag}`)());
     }
   }
   // build string
@@ -1628,42 +1621,68 @@ export class RegexpGroup extends RegexpPart {
     let result = '';
     const { flags, namedGroupConf } = conf;
     const groupsLen = groups.length;
-    const filterGroups: RegexpGroupItem[] = (() => {
-      let curGroups: RegexpGroupItem[] = [];
-      // special build logic, /(?<named_a_b_c_d>a|b|c|d)\k<named_a_b_c_d>/
-      if (captureName && captureName.includes('_') && namedGroupConf) {
-        const segs = captureName.split('_');
-        if (segs.length === groupsLen) {
-          const lastIndexs: number[] = [];
-          if (typeof namedGroupConf[captureName] === 'object') {
-            const conf = namedGroupConf[captureName] as NamedGroupConf<boolean>;
-            segs.forEach((key: string, index: number) => {
-              if (typeof conf[key] === 'boolean' && conf[key] === false) {
-                // ignore current group
+    const filterGroups: RegexpGroupItem[] = [];
+    const overrideGroups: RegexpGroupItem[] = [];
+    const overrideValues: string[][] = [];
+    let segNamedGroup: RegexpGroupItem;
+    let segNamedValue: string[] = [];
+    // special build logic, /(?<named_a_b_c_d>a|b|c|d)\k<named_a_b_c_d>/
+    if (captureName && captureName.includes('_') && namedGroupConf) {
+      const segs = captureName.split('_');
+      if (segs.length === groupsLen) {
+        let hasGroup = false;
+        if (typeof namedGroupConf[captureName] === 'object') {
+          const conf = namedGroupConf[captureName] as NamedGroupConf<boolean>;
+          segs.forEach((key: string, index: number) => {
+            if (typeof conf[key] === 'boolean' && conf[key] === false) {
+              // ignore current group
+            } else {
+              hasGroup = true;
+              const groupItem = groups[index];
+              if (Array.isArray(conf[key])) {
+                overrideGroups.push(groupItem);
+                overrideValues.push(conf[key] as string[]);
               } else {
-                lastIndexs.push(index);
+                filterGroups.push(groupItem);
               }
-            });
-          }
-          if (lastIndexs.length) {
-            curGroups = lastIndexs.map((index) => groups[index]);
-          } else {
-            throw new Error(
-              `the specified named group '${captureName}' are all filtered by the config.`,
+            }
+          });
+        }
+        if (!hasGroup) {
+          throw new Error(
+            `the specified named group '${captureName}' are all filtered by the config.`,
+          );
+        } else {
+          const overrideItemNum = overrideGroups.length;
+          if (overrideItemNum) {
+            // use override array
+            const index = makeRandom(
+              0,
+              overrideItemNum + filterGroups.length - 1,
             );
+            if (index < overrideItemNum) {
+              segNamedGroup = overrideGroups[index];
+              segNamedValue = overrideValues[index];
+            }
           }
         }
       }
-      return curGroups;
-    })();
+    }
     if (
       captureName &&
       namedGroupConf &&
       namedGroupConf[captureName] &&
-      Array.isArray(namedGroupConf[captureName])
+      (Array.isArray(namedGroupConf[captureName]) || segNamedGroup)
     ) {
-      const namedGroup = namedGroupConf[captureName] as string[];
-      const curRule = this.buildRule(flags);
+      let namedGroup: string[];
+      let curRule: RegExp;
+      if (!segNamedGroup) {
+        namedGroup = namedGroupConf[captureName] as string[];
+        curRule = this.buildRule(flags);
+      } else {
+        namedGroup = segNamedValue;
+        curRule = this.buildRule.call(segNamedGroup, flags);
+      }
       const index = makeRandom(0, namedGroup.length - 1);
       result = namedGroup[index];
       if (!curRule.test(result)) {

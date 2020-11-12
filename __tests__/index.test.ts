@@ -51,6 +51,7 @@ describe('Test regexp parser', () => {
     expect(validParser('/(?<name>abc)\\k<n>/')).toThrow();
     expect(validParser('/a(?=b)/')).toBeTruthy();
     expect(validInput('/a(?=b)/')).toBeTruthy();
+    expect(validParser('/(abc()()))/')).toThrow();
   });
 
   // valid times
@@ -72,6 +73,12 @@ describe('Test regexp parser', () => {
     expect(validParser('/a{3}*/')).toThrow();
     expect(validParser('/a{3}*/')).toThrow();
     expect(validParser('/a{3}??/')).toThrow();
+    expect(validMatch(/a{3,5}/)).toBeTruthy();
+    expect(validMatch(/a*/)).toBeTruthy();
+    expect(validMatch(/a+/)).toBeTruthy();
+    expect(validMatch(/a*?/)).toBeTruthy();
+    expect(validMatch(/a+?/)).toBeTruthy();
+    expect(validMatch(/a??/)).toBeTruthy();
   });
   // normal regexp rules
   test('test string match', () => {
@@ -95,7 +102,7 @@ describe('Test regexp parser', () => {
     const r1 = /[a-z]/;
     expect(validMatch(r1)).toBeTruthy();
     // empty set,match nothing
-    const r2 = /[]/;
+    const r2 = /a([])b\1/;
     expect(() => validValue(r2)).toThrow();
     // match everything
     const r3 = /^[^]$/;
@@ -128,10 +135,19 @@ describe('Test regexp parser', () => {
     expect(() => validValue(/a[]b/)).toThrow();
     // set with charset
     expect(validMatch(/[a-\s]/)).toBeTruthy();
+    expect(validMatch(/[^-a]/)).toBeTruthy();
+    expect(validMatch(/[a-]/)).toBeTruthy();
+    expect(validMatch(/[a-z]]/)).toBeTruthy();
     // translate char
     expect(validMatch(/[\xza-z]/)).toBeTruthy();
     // mixed reverse set
     expect(validMatch(/[^a-z\d]/)).toBeTruthy();
+    // character class
+    expect(/[\w]/.test(validValue(/[\w]/))).toBeTruthy();
+    // special set
+    expect(validMatch(/[[abc]/)).toBeTruthy();
+    // special range
+    expect(validMatch(/[{-}]/)).toBeTruthy();
   });
 
   // test u flag
@@ -143,10 +159,27 @@ describe('Test regexp parser', () => {
     // unicode set
     const r3 = /[\u{0061}-\u{0099}]/u;
     expect(validMatch(r3)).toBeTruthy();
+    // unicode any
+    const r4 = /./u;
+    expect(validMatch(r4)).toBeTruthy();
     // wrong unicode range
-    expect(validParser('/[\\u{010}-\\u{110000}]/')).toThrow();
+    expect(validParser('/[\\u{010}-\\u{110000}]/u')).toThrow();
+    // invalid control character
+    expect(validParser('/\\c1/u')).toThrow();
+    // valid control character
+    expect(validMatch(/\ca/u)).toBeTruthy();
+    expect(validMatch(/\c1/)).toBeTruthy();
+    expect(validParser('/\\u{110000}/u')).toThrow();
   });
-
+  // test i flag
+  test('test ignore case', () => {
+    const r1 = /[a-z]/i;
+    expect(
+      Array.from({
+        length: 30,
+      }).some(() => /[A-Z]/.test(validValue(r1))),
+    ).toBeTruthy();
+  });
   // groups
   test('test groups', () => {
     // group capture null
@@ -166,7 +199,7 @@ describe('Test regexp parser', () => {
       }),
     ).toThrow();
     // special named group match
-    const r3 = /(?<a_b_c_d>a|b|c|d+)\\k<a_b_c_d>/;
+    const r3 = /(ef)(?<a_b_c_d>a|b|c|d+\1?)\\k<a_b_c_d>/;
     expect(
       r3.test(
         validValue(r3, {
@@ -175,7 +208,45 @@ describe('Test regexp parser', () => {
               a: false,
               b: false,
               c: false,
-              d: ['dd'],
+              d: ['ddef', 'ddd'],
+            },
+          },
+        }),
+      ),
+    ).toBeTruthy();
+    // take as normal
+    expect(
+      r3.test(
+        validValue(r3, {
+          namedGroupConf: {
+            a_b_c_d: ['a', 'b'],
+          },
+        }),
+      ),
+    ).toBeTruthy();
+    // validate the override
+    expect(() =>
+      validValue(r3, {
+        namedGroupConf: {
+          a_b_c_d: {
+            a: false,
+            b: false,
+            c: false,
+            d: ['ee'], // 'ee' is not matched 'd+(ef)?'
+          },
+        },
+      }),
+    ).toThrow();
+    // not match
+    const rr3 = /(?<a_b_c>a|b|c|d+)\\k<a_b_c>/;
+    expect(
+      rr3.test(
+        validValue(rr3, {
+          namedGroupConf: {
+            a_b_c: {
+              a: false,
+              b: false,
+              c: true,
             },
           },
         }),
@@ -249,12 +320,21 @@ describe('Test regexp parser', () => {
     // normal named group
     const v2: string = validValue('/(?<name>haha)\\k<name>/');
     expect(v2 === 'hahahaha').toBeTruthy();
+    // reference
+    expect(validMatch(/(abc\1)/)).toBeTruthy();
+    expect(validMatch(/(?<name>abc\k<name>)/)).toBeTruthy();
+    //
+    expect(() => validMatch(/(abc(?=def))/)).toThrow();
   });
 
   // build
   test('test not supported', () => {
     const r1 = /^abc$/;
     expect(validMatch(r1)).toBeTruthy();
+    const r2 = /^a|b$/;
+    expect(validMatch(r2)).toBeTruthy();
+    const r3 = /a$|^b/;
+    expect(validMatch(r3)).toBeTruthy();
   });
 
   // flags
@@ -297,7 +377,6 @@ describe('Test regexp parser', () => {
         return validValue(/a*/).length <= 10;
       }),
     ).toBeTruthy();
-
     expect(
       Array.from({
         length: 10,
@@ -309,5 +388,13 @@ describe('Test regexp parser', () => {
         );
       }),
     ).toBeTruthy();
+  });
+  // test last info
+  test('test parser info', () => {
+    const r1 = new RegexpParser(/a(b(c))d/i);
+    const info = r1.info();
+    expect(info.lastRule).toEqual('a(b(c))d');
+    expect(info.flags.includes('i')).toBeTruthy();
+    expect(r1.info().lastRule === info.lastRule).toBeTruthy();
   });
 });

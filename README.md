@@ -83,15 +83,18 @@ get a regexp parsed queues, flags, lastRule after remove named captures.
 
 ## Special cases
 
-1. `/\1(o)/` the capture group `\1` will match nothing, the `build()` will just output `o`, and `/^\1(o)$/.test('o') === true`
+1. `/\1(o)/` the capture group `\1` will match null, the `build()` will just output `o`, and `/^\1(o)$/.test('o') === true`
 
 2. `/(o)\1\2/` the capture group `\2` will treated as code point of unicode. so the `build()` will output `oo\u0002`. `/^(o)\1\2$/.test('oo\u0002') === true`
 
-3. `/[]/` empty character class, the `build()` method will throw an error, because no character will match it.
+3. `/(o\1)/` the capture group `\1` will match null, `build()` will output `o`, `/^(o\1)$/.test('o') === true`
 
-4. `/[^]/` negative empty character class, the `build()` method will output any character.
+4. `/[]/` empty character class, the `build()` method will throw an error, because no character will match it.
 
-5. `/[^\w\W]/` for the negative charsets, if all the characters are eliminated, the `build()` will throw an error. the same such as `/[^a-zA-Z0-9_\W]/`、`/[^\s\S]/`...
+5. `/[^]/` negative empty character class, the `build()` method will output any character.
+
+6. `/[^\w\W]/` for the negative charsets, if all the characters are eliminated, the `build()` will throw an error. the same such as `/[^a-zA-Z0-9_\W]/`、`/[^\s\S]/`...
+
 
 ## Questions & Bugs?
 

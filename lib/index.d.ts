@@ -10,6 +10,7 @@ export declare type FlagsBinary = {
 };
 export declare type NamedGroupConf<T = never> = NormalObject<string[] | T>;
 export interface ParserConf {
+    maxRepeat?: number;
     namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
 }
 export interface BuildConfData extends ParserConf {
@@ -27,6 +28,7 @@ export declare const regexpRule: RegExp;
 export default class Parser {
     readonly rule: string | RegExp;
     private config;
+    static maxRepeat: number;
     readonly context: string;
     readonly flags: Flag[];
     readonly lastRule: string;
@@ -196,7 +198,9 @@ export declare class RegexpTimesMulti extends RegexpTimes {
     parse(): void;
 }
 export declare class RegexpTimesQuantifiers extends RegexpTimes {
+    protected readonly maxNum: number;
     protected rule: RegExp;
+    constructor(maxNum?: number);
     parse(): void;
 }
 export declare class RegexpSet extends RegexpPart {
