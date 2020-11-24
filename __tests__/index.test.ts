@@ -397,4 +397,27 @@ describe('Test regexp parser', () => {
     expect(info.flags.includes('i')).toBeTruthy();
     expect(r1.info().lastRule === info.lastRule).toBeTruthy();
   });
+  // test extractSetAverage
+  test('test average', () => {
+    const r1 = new RegexpParser(/[\Wa]/, {
+      extractSetAverage: true,
+    });
+    const r2 = new RegexpParser(/[\Wa]/);
+    const runTimes = 1e3;
+    let matchedTimes = 0;
+    let i: number;
+    for (i = 0; i < runTimes; i++) {
+      if (/\W/.test(r1.build())) {
+        matchedTimes++;
+      }
+    }
+    expect(matchedTimes > (runTimes * 2) / 3).toBeTruthy();
+    matchedTimes = 0;
+    for (i = 0; i < runTimes; i++) {
+      if (/\W/.test(r2.build())) {
+        matchedTimes++;
+      }
+    }
+    expect(matchedTimes < (runTimes * 2) / 3).toBeTruthy();
+  });
 });

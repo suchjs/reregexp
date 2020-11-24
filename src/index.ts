@@ -10,6 +10,41 @@ const makeRandom = (min: number, max: number): number => {
     return min + Math.floor(Math.random() * (max + 1 - min));
   }
 };
+// make a random from totals array
+const getRandomTotalIndex = (
+  totals: number[],
+): {
+  rand: number;
+  index: number;
+} => {
+  const total = getLastItem(totals);
+  const rand = makeRandom(1, total);
+  let nums = totals.length;
+  let index = 0;
+  while (nums > 1) {
+    const avg = Math.floor(nums / 2);
+    const prev = totals[index + avg - 1];
+    const next = totals[index + avg];
+    if (rand >= prev && rand <= next) {
+      // find
+      index += avg - (rand === prev ? 1 : 0);
+      break;
+    } else {
+      if (rand > next) {
+        // in the right side
+        index += avg + 1;
+        nums -= avg + 1;
+      } else {
+        // in the left side,keep the index
+        nums -= avg;
+      }
+    }
+  }
+  return {
+    rand,
+    index,
+  };
+};
 // get an array's last item
 const getLastItem = <T>(arr: T[]) => {
   return arr[arr.length - 1];
@@ -30,6 +65,7 @@ export type NamedGroupConf<T = never> = NormalObject<string[] | T>;
 export interface ParserConf {
   maxRepeat?: number;
   namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
+  extractSetAverage?: boolean;
 }
 export interface BuildConfData extends ParserConf {
   flags: FlagsHash;
@@ -181,29 +217,7 @@ class CharsetHelper {
   // make one character
   public static makeOne(info: CodePointResult) {
     const { totals, ranges } = info;
-    const total = getLastItem(totals);
-    const rand = makeRandom(1, total);
-    let nums = totals.length;
-    let index = 0;
-    while (nums > 1) {
-      const avg = Math.floor(nums / 2);
-      const prev = totals[index + avg - 1];
-      const next = totals[index + avg];
-      if (rand >= prev && rand <= next) {
-        // find
-        index += avg - (rand === prev ? 1 : 0);
-        break;
-      } else {
-        if (rand > next) {
-          // in the right side
-          index += avg + 1;
-          nums -= avg + 1;
-        } else {
-          // in the left side,keep the index
-          nums -= avg;
-        }
-      }
-    }
+    const { rand, index } = getRandomTotalIndex(totals);
     const codePoint = ranges[index][0] + (rand - (totals[index - 1] || 0)) - 1;
     return String.fromCodePoint(codePoint);
   }
@@ -318,11 +332,11 @@ export default class Parser {
       throw new Error(nullRootErr);
     } else {
       this.hasNullRoot = rootQueues.some((queue) => {
-        // first build, isMatchNothing is depend on 'build' method
-        result += queue.build(conf);
+        // make sure detect 'isMatchNothing' before 'build()'
         if (queue.isMatchNothing) {
           return true;
         }
+        result += queue.build(conf);
         return false;
       });
       if (this.hasNullRoot) throw new Error(nullRootErr);
@@ -357,6 +371,10 @@ export default class Parser {
     const hasFlagU = this.hasFlag('u');
     const nestQueues: RegexpPart[] = [];
     const refOrNumbers: RegexpPart[] = [];
+    const addToQueue = (...args: RegexpPart[]): void => {
+      args.forEach((queue: RegexpPart) => (queue.parser = this));
+      queues.push(...args);
+    };
     let groupCaptureIndex = 0;
     let curSet: RegexpSet = null;
     let curRange: RegexpRange = null;
@@ -418,7 +436,7 @@ export default class Parser {
         } else {
           newChar.parent = curSet;
         }
-        queues.push(newChar);
+        addToQueue(newChar);
         continue;
       }
       // match more
@@ -626,7 +644,7 @@ export default class Parser {
               curSet.reverse = true;
               i += 1;
             }
-            queues.push(curSet);
+            addToQueue(curSet);
             addToGroup(curSet);
             special = new RegexpSpecial('setBegin');
             special.parent = curSet;
@@ -660,7 +678,7 @@ export default class Parser {
                 curRange = new RegexpRange();
                 curRange.parent = curSet;
                 queues.pop().parent = curRange;
-                queues.push(curRange, lastQueue);
+                addToQueue(curRange, lastQueue);
                 special = new RegexpSpecial('rangeSplitor');
                 special.parent = curRange;
               }
@@ -725,7 +743,7 @@ export default class Parser {
       // push target to queues
       if (target) {
         const cur = target as RegexpPart;
-        queues.push(cur);
+        addToQueue(cur);
         if (curRange) {
           if (target.codePoint < 0) {
             // not char,translateChar,control char,or octal
@@ -734,7 +752,7 @@ export default class Parser {
             curSet.pop();
             [first, middle, second].map((item: RegexpPart) => {
               item.parent = curSet;
-              queues.push(item);
+              addToQueue(item);
               return item;
             });
           } else {
@@ -756,7 +774,7 @@ export default class Parser {
         if (target) {
           special.parent = target;
         }
-        queues.push(special);
+        addToQueue(special);
       }
     }
     // parse reference or number
@@ -882,6 +900,10 @@ export default class Parser {
     const binary = flagsBinary[flag];
     return binary && (binary & totalFlagBinary) !== 0;
   }
+  // flags hash
+  public getFlagsHash(): FlagsHash {
+    return this.flagsHash;
+  }
 }
 // make charset
 export type CharsetType = 'd' | 'w' | 's';
@@ -917,6 +939,7 @@ export abstract class RegexpPart {
   public queues: RegexpPart[] = [];
   public codePoint = -1;
   public abstract readonly type: string;
+  protected parserInstance: Parser;
   protected min = 1;
   protected max = 1;
   protected dataConf: Partial<BuildConfData> = {};
@@ -925,6 +948,20 @@ export abstract class RegexpPart {
   protected matchNothing = false;
   protected completed = true;
   constructor(public input: string = '') {}
+  // set/get the ref parser
+  get parser(): Parser {
+    return this.parserInstance;
+  }
+  set parser(parser: Parser) {
+    this.parserInstance = parser;
+  }
+  // get all possible count
+  get count(): number {
+    if (this.isMatchNothing) {
+      return 0;
+    }
+    return this.getCodePointCount();
+  }
   // parent getter and setter
   get parent(): RegexpPart {
     return this.curParent;
@@ -1046,6 +1083,11 @@ export abstract class RegexpPart {
     } else {
       return '';
     }
+  }
+
+  // codePointCount
+  protected getCodePointCount(): number {
+    return 1;
   }
 }
 
@@ -1172,6 +1214,15 @@ export class RegexpCharset extends RegexpPart {
         conf.flags,
       );
     }
+  }
+  // charset's maybe character count
+  protected getCodePointCount(): number {
+    const { parser, charset } = this;
+    const { totals } = charH.getCharsetInfo(
+      charset as CharsetType | CharsetNegatedType,
+      parser.getFlagsHash(),
+    );
+    return getLastItem(totals);
   }
 }
 
@@ -1312,16 +1363,30 @@ export class RegexpSet extends RegexpPart {
     this.isComplete = false;
     this.buildForTimes = true;
   }
+  // override set parser
+  set parser(parser: Parser) {
+    this.parserInstance = parser;
+    this.makeCodePointResult();
+  }
+  get parser(): Parser {
+    return this.parserInstance;
+  }
+  //
   get isComplete(): boolean {
     return this.completed;
   }
   set isComplete(value: boolean) {
     this.completed = value;
-    if (value === true && this.queues.length === 0) {
-      if (this.reverse) {
-        this.isMatchAnything = true;
+    if (value === true) {
+      const isEmptyQueue = this.queues.length === 0;
+      if (isEmptyQueue) {
+        if (this.reverse) {
+          this.isMatchAnything = true;
+        } else {
+          this.isMatchNothing = true;
+        }
       } else {
-        this.isMatchNothing = true;
+        this.makeCodePointResult();
       }
     }
   }
@@ -1344,86 +1409,6 @@ export class RegexpSet extends RegexpPart {
     }
     const { queues } = this;
     if (this.reverse) {
-      // with begin ^, reverse the sets
-      if (!this.codePointResult) {
-        if (
-          queues.length === 1 &&
-          queues[0].type === 'charset' &&
-          ['w', 's', 'd'].includes(
-            (queues[0] as RegexpCharset).charset.toLowerCase(),
-          )
-        ) {
-          const charCode =
-            (queues[0] as RegexpCharset).charset.charCodeAt(0) ^ 0b100000;
-          const charset = String.fromCharCode(charCode) as
-            | CharsetType
-            | CharsetNegatedType;
-          this.codePointResult = charH.getCharsetInfo(charset, conf.flags);
-        } else {
-          const ranges = queues.reduce(
-            (res: CodePointRanges, item: RegexpPart) => {
-              const { type } = item;
-              let cur: CodePointRanges;
-              if (type === 'charset') {
-                const charset = (item as RegexpCharset)
-                  .charset as CharsetAllType;
-                if (charset === 'b' || charset === 'B') {
-                  // eslint-disable-next-line no-console
-                  console.warn('the charset \\b or \\B will ignore');
-                  cur = [];
-                } else {
-                  cur = charH.getCharsetInfo(charset, conf.flags).ranges;
-                }
-              } else if (type === 'range') {
-                cur = [
-                  (item as RegexpRange).queues.map((e: RegexpPart) => {
-                    return e.codePoint;
-                  }),
-                ];
-              } else {
-                cur = [[item.codePoint]];
-              }
-              return res.concat(cur);
-            },
-            [],
-          );
-          ranges.push([0xd800, 0xdfff], conf.flags.u ? [0x110000] : [0x10000]);
-          ranges.sort((a: number[], b: number[]) => {
-            return b[0] > a[0]
-              ? -1
-              : b[0] === a[0]
-              ? b[1] > a[1]
-                ? 1
-                : -1
-              : 1;
-          });
-          const negated = [];
-          let point = 0;
-          for (let i = 0, j = ranges.length; i < j; i++) {
-            const cur = ranges[i];
-            const [start] = cur;
-            const end = cur[1] || start;
-            if (point < start) {
-              negated.push(point + 1 === start ? [point] : [point, start - 1]);
-            }
-            point = Math.max(end + 1, point);
-          }
-          if (negated.length === 0) {
-            this.isMatchNothing = true;
-          } else {
-            let total = 0;
-            const totals = negated.map((item: number[]) => {
-              if (item.length === 1) {
-                total += 1;
-              } else {
-                total += item[1] - item[0] + 1;
-              }
-              return total;
-            });
-            this.codePointResult = { totals, ranges: negated };
-          }
-        }
-      }
       if (this.isMatchNothing) {
         // eslint-disable-next-line no-console
         console.error('the rule is match nothing');
@@ -1431,8 +1416,98 @@ export class RegexpSet extends RegexpPart {
       }
       return charH.makeOne(this.codePointResult);
     }
-    const index = makeRandom(0, queues.length - 1);
+    let index: number;
+    if (conf.extractSetAverage) {
+      let total = 0;
+      const totals = queues.map((queue) => (total = total + queue.count));
+      index = getRandomTotalIndex(totals).index;
+    } else {
+      index = makeRandom(0, queues.length - 1);
+    }
     return this.queues[index].build(conf) as string;
+  }
+  //
+  protected getCodePointCount(): number {
+    return 1;
+  }
+  // set code point result
+  protected makeCodePointResult(): void {
+    if (!this.reverse || !this.parser || !this.isComplete) return;
+    // with begin ^, reverse the sets
+    if (!this.codePointResult) {
+      const { queues, parser } = this;
+      const flags = parser.getFlagsHash();
+      if (
+        queues.length === 1 &&
+        queues[0].type === 'charset' &&
+        ['w', 's', 'd'].includes(
+          (queues[0] as RegexpCharset).charset.toLowerCase(),
+        )
+      ) {
+        const charCode =
+          (queues[0] as RegexpCharset).charset.charCodeAt(0) ^ 0b100000;
+        const charset = String.fromCharCode(charCode) as
+          | CharsetType
+          | CharsetNegatedType;
+        this.codePointResult = charH.getCharsetInfo(charset, flags);
+      } else {
+        const ranges = queues.reduce(
+          (res: CodePointRanges, item: RegexpPart) => {
+            const { type } = item;
+            let cur: CodePointRanges;
+            if (type === 'charset') {
+              const charset = (item as RegexpCharset).charset as CharsetAllType;
+              if (charset === 'b' || charset === 'B') {
+                // eslint-disable-next-line no-console
+                console.warn('the charset \\b or \\B will ignore');
+                cur = [];
+              } else {
+                cur = charH.getCharsetInfo(charset, flags).ranges;
+              }
+            } else if (type === 'range') {
+              cur = [
+                (item as RegexpRange).queues.map((e: RegexpPart) => {
+                  return e.codePoint;
+                }),
+              ];
+            } else {
+              cur = [[item.codePoint]];
+            }
+            return res.concat(cur);
+          },
+          [],
+        );
+        ranges.push([0xd800, 0xdfff], flags.u ? [0x110000] : [0x10000]);
+        ranges.sort((a: number[], b: number[]) => {
+          return b[0] > a[0] ? -1 : b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1;
+        });
+        const negated = [];
+        let point = 0;
+        for (let i = 0, j = ranges.length; i < j; i++) {
+          const cur = ranges[i];
+          const [start] = cur;
+          const end = cur[1] || start;
+          if (point < start) {
+            negated.push(point + 1 === start ? [point] : [point, start - 1]);
+          }
+          point = Math.max(end + 1, point);
+        }
+        if (negated.length === 0) {
+          this.isMatchNothing = true;
+        } else {
+          let total = 0;
+          const totals = negated.map((item: number[]) => {
+            if (item.length === 1) {
+              total += 1;
+            } else {
+              total += item[1] - item[0] + 1;
+            }
+            return total;
+          });
+          this.codePointResult = { totals, ranges: negated };
+        }
+      }
+    }
   }
 }
 
@@ -1463,6 +1538,13 @@ export class RegexpRange extends RegexpPart {
     const min = prev.codePoint;
     const max = next.codePoint;
     return String.fromCodePoint(makeRandom(min, max));
+  }
+  // the range's possible character counts
+  protected getCodePointCount(): number {
+    const [prev, next] = this.queues;
+    const min = prev.codePoint;
+    const max = next.codePoint;
+    return max - min + 1;
   }
 }
 

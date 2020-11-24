@@ -43,6 +43,10 @@ const r7 = new RegexpParser(/a*/); // 'a' will repeated at most 10 times.
 const r8 = new RegexpParser(/a*/, {
   maxRepeat: 20, // 'a' will repeated at most 20 times
 });
+// extractSetAverage
+const r9 = new RegexpParser(/[\Wa-z]/, {
+  extractSetAverage: true, // \W will extract as all the characters match \W, a-z now doesn't have the same chance as \W 
+});
 ```
 
 ## Supported flags
