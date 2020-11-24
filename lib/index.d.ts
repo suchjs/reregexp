@@ -12,6 +12,7 @@ export declare type NamedGroupConf<T = never> = NormalObject<string[] | T>;
 export interface ParserConf {
     maxRepeat?: number;
     namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
+    extractSetAverage?: boolean;
 }
 export interface BuildConfData extends ParserConf {
     flags: FlagsHash;
@@ -46,6 +47,7 @@ export default class Parser {
     private parse;
     private checkFlags;
     private hasFlag;
+    getFlagsHash(): FlagsHash;
 }
 export declare type CharsetType = 'd' | 'w' | 's';
 export declare type CharsetNegatedType = 'D' | 'W' | 'S';
@@ -72,6 +74,7 @@ export declare abstract class RegexpPart {
     queues: RegexpPart[];
     codePoint: number;
     abstract readonly type: string;
+    protected parserInstance: Parser;
     protected min: number;
     protected max: number;
     protected dataConf: Partial<BuildConfData>;
@@ -80,6 +83,9 @@ export declare abstract class RegexpPart {
     protected matchNothing: boolean;
     protected completed: boolean;
     constructor(input?: string);
+    get parser(): Parser;
+    set parser(parser: Parser);
+    get count(): number;
     get parent(): RegexpPart;
     set parent(value: RegexpPart);
     set linkParent(value: RegexpPart);
@@ -98,6 +104,7 @@ export declare abstract class RegexpPart {
     getRuleInput(_parseReference?: boolean): string;
     protected buildRuleInputFromQueues(): string;
     protected prebuild(conf: BuildConfData): string | never;
+    protected getCodePointCount(): number;
 }
 export declare abstract class RegexpEmpty extends RegexpPart {
     constructor(input?: string);
@@ -152,6 +159,7 @@ export declare class RegexpCharset extends RegexpPart {
     readonly charset: CharsetAllType;
     constructor(input: string);
     protected prebuild(conf: BuildConfData): string;
+    protected getCodePointCount(): number;
 }
 export declare class RegexpPrint extends RegexpPart {
     readonly type = "print";
@@ -209,11 +217,15 @@ export declare class RegexpSet extends RegexpPart {
     private isMatchAnything;
     private codePointResult;
     constructor();
+    set parser(parser: Parser);
+    get parser(): Parser;
     get isComplete(): boolean;
     set isComplete(value: boolean);
     isSetStart(): boolean;
     getRuleInput(): string;
     protected prebuild(conf: BuildConfData): string;
+    protected getCodePointCount(): number;
+    protected makeCodePointResult(): void;
 }
 export declare class RegexpRange extends RegexpPart {
     readonly type = "range";
@@ -221,6 +233,7 @@ export declare class RegexpRange extends RegexpPart {
     add(target: RegexpPart): void | never;
     getRuleInput(): string;
     protected prebuild(): string;
+    protected getCodePointCount(): number;
 }
 export declare abstract class RegexpHexCode extends RegexpOrigin {
     readonly type = "hexcode";
