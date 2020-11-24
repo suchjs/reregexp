@@ -947,6 +947,10 @@ export abstract class RegexpPart {
   protected curParent: RegexpPart = null;
   protected matchNothing = false;
   protected completed = true;
+  public anchorBegin = false;
+  public anchorEnd = false;
+  public next: RegexpPart = null;
+  public prev: RegexpPart = null;
   constructor(public input: string = '') {}
   // set/get the ref parser
   get parser(): Parser {
