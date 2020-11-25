@@ -378,18 +378,22 @@ export default class Parser {
     let groupCaptureIndex = 0;
     let curSet: RegexpSet = null;
     let curRange: RegexpRange = null;
-    // const curAnchorBegin: RegexpAnchor = null;
+    let curAnchor: RegexpAnchor = null;
     const addToGroupOrLookaround = (cur: RegexpPart) => {
-      const curQueue = getLastItem(nestQueues);
+      const curQueue =
+        getLastItem(nestQueues) ||
+        getLastItem(groups) ||
+        getLastItem(lookarounds);
       if (['group', 'lookaround'].includes(cur.type)) {
         const lists = cur.type === 'group' ? groups : lookarounds;
         (lists as RegexpPart[]).push(cur);
         nestQueues.push(cur);
       }
       if (curQueue) {
-        cur.parent = curQueue;
         if (curQueue.type === 'group') {
           (curQueue as RegexpGroup).addItem(cur);
+        } else {
+          cur.parent = curQueue;
         }
       }
     };
@@ -731,6 +735,19 @@ export default class Parser {
         case s.beginWith:
         case s.endWith:
           target = new RegexpAnchor(char);
+          if (curAnchor) {
+            if (curAnchor.anchor !== char) {
+              // ^$ or $^
+              curAnchor.emptyAnchor = true;
+              target.emptyAnchor = true;
+            } else {
+              // repeat ^^ $$
+              curAnchor.repeatedAnchor = true;
+              curAnchor.next = target;
+              target.prev = curAnchor;
+            }
+          }
+          curAnchor = target;
           break;
         // match /
         case s.delimiter:
@@ -1686,7 +1703,7 @@ export class RegexpGroup extends RegexpPart {
     const segs = groups.map((groupItem) => {
       return groupItem.getRuleInput(parseReference);
     });
-    if (captureIndex === 0) {
+    if (captureIndex === 0 && !isRoot) {
       result = '?:' + result;
     }
     result += segs.join('|');
