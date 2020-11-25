@@ -379,7 +379,10 @@ export default class Parser {
     let curSet: RegexpSet = null;
     let curRange: RegexpRange = null;
     const addToGroupOrLookaround = (cur: RegexpPart) => {
-      const curQueue = getLastItem(nestQueues);
+      const curQueue =
+        getLastItem(nestQueues) ||
+        getLastItem(groups) ||
+        getLastItem(lookarounds);
       if (['group', 'lookaround'].includes(cur.type)) {
         const lists = cur.type === 'group' ? groups : lookarounds;
         (lists as RegexpPart[]).push(cur);
@@ -1650,7 +1653,6 @@ export class RegexpGroup extends RegexpPart {
   }
   // add a new group item
   public addNewGroup(): RegexpGroupItem {
-    console.log('触发addGroup');
     const { queues } = this;
     const groupItem = new RegexpGroupItem(queues.length);
     this.curGroupItem = groupItem;
@@ -1677,7 +1679,7 @@ export class RegexpGroup extends RegexpPart {
     const segs = groups.map((groupItem) => {
       return groupItem.getRuleInput(parseReference);
     });
-    if (captureIndex === 0) {
+    if (captureIndex === 0 && !isRoot) {
       result = '?:' + result;
     }
     result += segs.join('|');

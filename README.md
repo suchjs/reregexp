@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/reregexp.svg)](https://badge.fury.io/js/reregexp)&nbsp;&nbsp;[![Build Status](https://travis-ci.org/suchjs/reregexp.svg?branch=master)](https://travis-ci.org/suchjs/reregexp)
 [![Coverage Status](https://coveralls.io/repos/github/suchjs/reregexp/badge.svg?branch=master)](https://coveralls.io/github/suchjs/reregexp?branch=master)
 
-Parse a regular expression to rule parts, and build a string match it. You can use it to mock a string with the given regular expression. it strictly abide by the real RegExp rules of the javascript language.Please see the[Special cases](#special-cases)
+Parse a regular expression to rule parts, and build a string match it. You can use it to mock a string with the given regular expression. it strictly abide by the real RegExp rules of the javascript language.[Special cases](#special-cases)
 
 reregexp 主要用来解析正则表达式，根据正则表达式生成一个相匹配的随机字符串。
 

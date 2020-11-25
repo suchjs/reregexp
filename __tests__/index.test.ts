@@ -309,7 +309,7 @@ describe('Test regexp parser', () => {
     const r16 = /(a)\08/;
     expect(validMatch(r16)).toBeTruthy();
     // with point
-    expect(validMatch(/(^a|b|c$)/)).toBeTruthy();
+    expect(validMatch(/(^a|b$|c$)/)).toBeTruthy();
     // named group with conf
     const v1: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
       namedGroupConf: {
