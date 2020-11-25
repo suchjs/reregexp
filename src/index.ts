@@ -378,18 +378,18 @@ export default class Parser {
     let groupCaptureIndex = 0;
     let curSet: RegexpSet = null;
     let curRange: RegexpRange = null;
-    const addToGroup = (cur: RegexpPart) => {
-      if (groups.length || lookarounds.length) {
-        const isGroup =
-          (nestQueues.length && getLastItem(nestQueues).type === 'group') ||
-          groups.length > 0;
-        const curQueue = isGroup
-          ? getLastItem(groups)
-          : getLastItem(lookarounds);
-        if (isGroup) {
+    // const curAnchorBegin: RegexpAnchor = null;
+    const addToGroupOrLookaround = (cur: RegexpPart) => {
+      const curQueue = getLastItem(nestQueues);
+      if (['group', 'lookaround'].includes(cur.type)) {
+        const lists = cur.type === 'group' ? groups : lookarounds;
+        (lists as RegexpPart[]).push(cur);
+        nestQueues.push(cur);
+      }
+      if (curQueue) {
+        cur.parent = curQueue;
+        if (curQueue.type === 'group') {
           (curQueue as RegexpGroup).addItem(cur);
-        } else {
-          cur.parent = curQueue;
         }
       }
     };
@@ -581,7 +581,6 @@ export default class Parser {
             target = new RegexpGroup();
             special = new RegexpSpecial('groupBegin');
           }
-          nestQueues.push(target);
           if (!isLookaround) {
             target = target as RegexpGroup;
             // get capture info
@@ -645,7 +644,7 @@ export default class Parser {
               i += 1;
             }
             addToQueue(curSet);
-            addToGroup(curSet);
+            addToGroupOrLookaround(curSet);
             special = new RegexpSpecial('setBegin');
             special.parent = curSet;
           }
@@ -762,11 +761,7 @@ export default class Parser {
         } else if (curSet) {
           cur.parent = curSet;
         } else {
-          addToGroup(cur);
-        }
-        if (['group', 'lookaround'].includes(cur.type)) {
-          const lists = cur.type === 'group' ? groups : lookarounds;
-          (lists as RegexpPart[]).push(cur);
+          addToGroupOrLookaround(cur);
         }
       }
       // add special
@@ -951,6 +946,10 @@ export abstract class RegexpPart {
   public anchorEnd = false;
   public next: RegexpPart = null;
   public prev: RegexpPart = null;
+  public nextShouldBe: RegexpLookaround = null;
+  public nextShouldNotBe: RegexpLookaround = null;
+  public prevShouldBe: RegexpLookaround = null;
+  public prevShouldNotBe: RegexpLookaround = null;
   constructor(public input: string = '') {}
   // set/get the ref parser
   get parser(): Parser {
@@ -1240,6 +1239,8 @@ export class RegexpPrint extends RegexpPart {
 export class RegexpAnchor extends RegexpEmpty {
   public readonly type = 'anchor';
   public anchor: string;
+  public repeatedAnchor = false;
+  public emptyAnchor = false;
   constructor(input: string) {
     super(input);
     this.anchor = input;
