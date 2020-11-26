@@ -25,10 +25,14 @@ const validInput = (rule: Rule): boolean => {
       : rule.replace(/^\//, '').replace(/\/[imguys]*$/, ''))
   );
 };
-const mustIn = (values: string[], rule: Rule): boolean => {
+const mustIn = (
+  values: string[],
+  rule: Rule,
+  conf: ParserConf = {},
+): boolean => {
   const runTimes = 50;
   for (let i = 0, j = runTimes; i < j; i++) {
-    const value = validValue(rule);
+    const value = validValue(rule, conf);
     if (!values.includes(value)) return false;
   }
   return true;
@@ -69,6 +73,7 @@ describe('Test regexp parser', () => {
     expect(validParser('/a??/')).toBeTruthy();
     expect(validParser('/a???/')).toThrow();
     expect(validParser('/a{3}?/')).toBeTruthy();
+    expect(validParser('/a{3,}?/')).toBeTruthy();
     expect(validParser('/a{3}+/')).toThrow();
     expect(validParser('/a{3}*/')).toThrow();
     expect(validParser('/a{3}*/')).toThrow();
@@ -79,6 +84,11 @@ describe('Test regexp parser', () => {
     expect(validMatch(/a*?/)).toBeTruthy();
     expect(validMatch(/a+?/)).toBeTruthy();
     expect(validMatch(/a??/)).toBeTruthy();
+    // wrong quantifer
+    expect(validValue(/a{ 3}/) === 'a{ 3}').toBeTruthy();
+    expect(validValue(/a{3, }/) === 'a{3, }').toBeTruthy();
+    expect(validValue(/a{3, 5}/) === 'a{3, 5}').toBeTruthy();
+    expect(validParser('/a{5,3}/')).toThrow();
   });
   // normal regexp rules
   test('test string match', () => {
@@ -148,6 +158,8 @@ describe('Test regexp parser', () => {
     expect(validMatch(/[[abc]/)).toBeTruthy();
     // special range
     expect(validMatch(/[{-}]/)).toBeTruthy();
+    // ignore \b\B
+    expect(validMatch(/[^a\bc]/)).toBeTruthy();
   });
 
   // test u flag
@@ -283,7 +295,7 @@ describe('Test regexp parser', () => {
     expect(mustIn([':a', 'b', 'c'], r7)).toBeTruthy();
     expect(mustIn([':a', 'b', 'c'], r8)).toBeTruthy();
     expect(validValue(r9)).toEqual('');
-    expect(validInput(r9)).toBeTruthy();
+    expect(validInput(r9)).toBeFalsy();
     // group ref item
     const r10 = /(d)(a|b|c|\1)/;
     expect(mustIn(['da', 'db', 'dc', 'dd'], r10)).toBeTruthy();
@@ -311,12 +323,15 @@ describe('Test regexp parser', () => {
     // with point
     expect(validMatch(/(^a|b$|c$)/)).toBeTruthy();
     // named group with conf
-    const v1: string = validValue('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
+    const v1 = new RegexpParser('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
       namedGroupConf: {
         namecap: ['aa', 'bb'],
       },
     });
-    expect(['abbddddddaa', 'abbddddddbb'].includes(v1)).toBeTruthy();
+    const v1values = ['abbddddddaa', 'abbddddddbb'];
+    for (let i = 0, j = 10; i < j; i++) {
+      expect(v1values.includes(v1.build())).toBeTruthy();
+    }
     // normal named group
     const v2: string = validValue('/(?<name>haha)\\k<name>/');
     expect(v2 === 'hahahaha').toBeTruthy();
@@ -399,25 +414,32 @@ describe('Test regexp parser', () => {
   });
   // test extractSetAverage
   test('test average', () => {
+    const runTimes = 1e3;
+    let matchedTimes: number;
+    let i: number;
+    const run = (fn: () => boolean) => {
+      matchedTimes = 0;
+      for (i = 0; i < runTimes; i++) {
+        if (fn()) {
+          matchedTimes++;
+        }
+      }
+    };
+    // r1
     const r1 = new RegexpParser(/[\Wa]/, {
       extractSetAverage: true,
     });
-    const r2 = new RegexpParser(/[\Wa]/);
-    const runTimes = 1e3;
-    let matchedTimes = 0;
-    let i: number;
-    for (i = 0; i < runTimes; i++) {
-      if (/\W/.test(r1.build())) {
-        matchedTimes++;
-      }
-    }
+    run(() => /\W/.test(r1.build()));
     expect(matchedTimes > (runTimes * 2) / 3).toBeTruthy();
-    matchedTimes = 0;
-    for (i = 0; i < runTimes; i++) {
-      if (/\W/.test(r2.build())) {
-        matchedTimes++;
-      }
-    }
+    // r2
+    const r2 = new RegexpParser(/[\Wa]/);
+    run(() => /\W/.test(r2.build()));
     expect(matchedTimes < (runTimes * 2) / 3).toBeTruthy();
+    // r3
+    const r3 = new RegexpParser(/[a-z,]/, {
+      extractSetAverage: true,
+    });
+    run(() => /[a-z]/.test(r3.build()));
+    expect(matchedTimes > (runTimes * 2) / 3).toBeTruthy();
   });
 });

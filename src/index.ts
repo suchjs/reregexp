@@ -1315,7 +1315,7 @@ export abstract class RegexpTimes extends RegexpPart {
 }
 
 export class RegexpTimesMulti extends RegexpTimes {
-  protected rule = /^(\{(\d+)(,(\d*))?}(\??))/;
+  protected rule = /^(\{(\d+)(,|,(\d*))?}(\??))/;
   public parse(): void {
     const { $2: min, $3: code, $4: max, $5: optional } = RegExp;
     this.greedy = optional !== '?';
@@ -1325,6 +1325,11 @@ export class RegexpTimesMulti extends RegexpTimes {
       : code
       ? this.minRepeat + this.maxNum * 2
       : this.minRepeat;
+    if (this.maxRepeat < this.minRepeat) {
+      throw new Error(
+        `wrong quantifier: {${this.minRepeat}, ${this.maxRepeat}}`,
+      );
+    }
   }
 }
 
@@ -1400,18 +1405,8 @@ export class RegexpSet extends RegexpPart {
     if (this.isMatchAnything) {
       return new RegexpAny().build(conf);
     }
-    if (this.matchNothing) {
-      // eslint-disable-next-line no-console
-      console.warn('the empty set will match nothing:[]');
-      return '';
-    }
     const { queues } = this;
     if (this.reverse) {
-      if (this.isMatchNothing) {
-        // eslint-disable-next-line no-console
-        console.error('the rule is match nothing');
-        return '';
-      }
       return charH.makeOne(this.codePointResult);
     }
     let index: number;
@@ -1423,10 +1418,6 @@ export class RegexpSet extends RegexpPart {
       index = makeRandom(0, queues.length - 1);
     }
     return this.queues[index].build(conf) as string;
-  }
-  //
-  protected getCodePointCount(): number {
-    return 1;
   }
   // set code point result
   protected makeCodePointResult(): void {
@@ -1620,9 +1611,7 @@ export class RegexpGroupItem extends RegexpPart {
   }
   //
   private isEndLimitChar(target: RegexpPart) {
-    return (
-      target.type === 'char' && (target.input === '^' || target.input === '$')
-    );
+    return target.type === 'anchor';
   }
 }
 
