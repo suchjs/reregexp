@@ -224,7 +224,6 @@ export declare class RegexpSet extends RegexpPart {
     isSetStart(): boolean;
     getRuleInput(): string;
     protected prebuild(conf: BuildConfData): string;
-    protected getCodePointCount(): number;
     protected makeCodePointResult(): void;
 }
 export declare class RegexpRange extends RegexpPart {
