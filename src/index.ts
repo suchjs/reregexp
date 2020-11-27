@@ -79,7 +79,7 @@ export type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'flags'> & {
   queues: RegexpPart[];
 };
 
-class CharsetHelper {
+export class CharsetHelper {
   public static readonly points: CodePointData<CodePointRanges> = {
     d: [[48, 57]], // character 0-9
     w: [[48, 57], [65, 90], [95], [97, 122]], // 0-9, A-Z, _, a-z
@@ -143,21 +143,24 @@ class CharsetHelper {
         add(start, max);
         add(nextStart, nextMax);
       } else {
+        // should exclude
         const excepts =
           type === 'ALL'
             ? [[0x000a], [0x000d], [0x2028, 0x2029]]
             : points[type.toLowerCase() as CharsetType];
-        const specialNum = type === 'S' ? 1 : 0;
-        let total = excepts.length;
-        while (start <= max && total > specialNum) {
-          const [begin, end] = excepts[--total];
+        const isNegaWhitespace = type === 'S';
+        const count = excepts.length - (isNegaWhitespace ? 1 : 0);
+        let looped = 0;
+        while (start <= max && count > looped) {
+          const [begin, end] = excepts[looped++];
           add(start, begin - 1);
           start = (end || begin) + 1;
         }
         if (start < max) {
           add(start, max);
         }
-        if (type === 'S') {
+        if (isNegaWhitespace) {
+          // 0xfeff
           const last = getLastItem(excepts)[0];
           add(nextStart, last - 1);
           add(last + 1, nextMax);
@@ -172,7 +175,7 @@ class CharsetHelper {
     }
   }
   // charset of type 's'|'d'|'w'
-  public static charsetOf(type: CharsetType) {
+  public static charsetOf(type: CharsetType): CodePointResult {
     const { lens, points } = CharsetHelper;
     return {
       ranges: points[type],
@@ -199,10 +202,10 @@ class CharsetHelper {
         last = helper.charsetOfNegated(type as CharsetNegatedType);
       }
       if (flags.u) {
-        last.ranges = last.ranges
-          .slice(0)
-          .concat([helper.bigCharPoint.slice(0)]);
-        last.totals = last.totals.slice(0).concat(helper.bigCharTotal);
+        last = {
+          ranges: last.ranges.concat([helper.bigCharPoint]),
+          totals: last.totals.concat(helper.bigCharTotal),
+        };
       }
     }
     return last;
@@ -215,7 +218,7 @@ class CharsetHelper {
     return CharsetHelper.makeOne(CharsetHelper.getCharsetInfo(type, flags));
   }
   // make one character
-  public static makeOne(info: CodePointResult) {
+  public static makeOne(info: CodePointResult): string {
     const { totals, ranges } = info;
     const { rand, index } = getRandomTotalIndex(totals);
     const codePoint = ranges[index][0] + (rand - (totals[index - 1] || 0)) - 1;
@@ -308,10 +311,7 @@ export default class Parser {
     this.parse();
     this.lastRule = this.ruleInput;
   }
-  // set configs
-  public setConfig(conf: ParserConf): void {
-    this.config = conf;
-  }
+
   // build
   public build(): string | never {
     if (this.hasLookaround) {
@@ -800,7 +800,7 @@ export default class Parser {
         const total = strNum.length;
         let matchLen = 0;
         let instance: RegexpPart;
-        if (+strNum <= refLen) {
+        if (strNum.charAt(0) !== '0' && +strNum <= refLen) {
           instance = new RegexpReference(item.input);
           (instance as RegexpReference).ref = null;
           matchLen = total;
@@ -955,9 +955,9 @@ export abstract class RegexpPart {
   }
   // get all possible count
   get count(): number {
-    if (this.isMatchNothing) {
-      return 0;
-    }
+    // if (this.isMatchNothing) {
+    //   return 0;
+    // }
     return this.getCodePointCount();
   }
   // parent getter and setter
@@ -1043,10 +1043,6 @@ export abstract class RegexpPart {
   // set data conf
   public setDataConf(_conf: BuildConfData, _result: string): void {
     // will override by sub class
-  }
-  // toString
-  public toString(): string {
-    return this.input;
   }
 
   // check if this is the ancestor of the target
@@ -1393,9 +1389,6 @@ export class RegexpSet extends RegexpPart {
       }
     }
   }
-  public isSetStart(): boolean {
-    return this.queues.length === 0;
-  }
   public getRuleInput(): string {
     return (
       '[' + (this.reverse ? '^' : '') + this.buildRuleInputFromQueues() + ']'
@@ -1451,7 +1444,7 @@ export class RegexpSet extends RegexpPart {
                 console.warn('the charset \\b or \\B will ignore');
                 cur = [];
               } else {
-                cur = charH.getCharsetInfo(charset, flags).ranges;
+                cur = charH.getCharsetInfo(charset, flags).ranges.slice(0);
               }
             } else if (type === 'range') {
               cur = [

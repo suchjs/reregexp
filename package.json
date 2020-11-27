@@ -1,6 +1,6 @@
 {
   "name": "reregexp",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Generate a string match the given regular expression, and also parse the regexp to AST segments.",
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",

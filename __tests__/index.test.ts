@@ -1,4 +1,4 @@
-import RegexpParser, { ParserConf } from '../src/index';
+import RegexpParser, { ParserConf, CharsetHelper } from '../src/index';
 type Rule = RegExp | string;
 const validParser = (rule: Rule) => {
   return () => {
@@ -30,13 +30,26 @@ const mustIn = (
   rule: Rule,
   conf: ParserConf = {},
 ): boolean => {
-  const runTimes = 50;
-  for (let i = 0, j = runTimes; i < j; i++) {
+  for (let i = 0; i < RUNTIMES; i++) {
     const value = validValue(rule, conf);
     if (!values.includes(value)) return false;
   }
   return true;
 };
+const RUNTIMES = 1e3;
+const run = (() => {
+  let matchedTimes: number;
+  let i: number;
+  return (fn: () => boolean): number => {
+    matchedTimes = 0;
+    for (i = 0; i < RUNTIMES; i++) {
+      if (fn()) {
+        matchedTimes++;
+      }
+    }
+    return matchedTimes;
+  };
+})();
 describe('Test regexp parser', () => {
   // patterns
   test('test patterns', () => {
@@ -340,6 +353,11 @@ describe('Test regexp parser', () => {
     expect(validMatch(/(?<name>abc\k<name>)/)).toBeTruthy();
     //
     expect(() => validMatch(/(abc(?=def))/)).toThrow();
+    // special reference
+    expect(validValue(/(a)bc\81/) === 'abc81').toBeTruthy();
+    // octal
+    expect(validValue(/(a)bc\051/) === 'abc\u{29}').toBeTruthy();
+    expect(validMatch(/(a)(bc|\81)/)).toBeTruthy();
   });
 
   // build
@@ -368,6 +386,8 @@ describe('Test regexp parser', () => {
     expect(/./s.test(validValue(/./s))).toBeTruthy();
     // \b
     expect(validValue(/a\bb/)).toEqual('ab');
+    // range
+    expect(validValue(/a-z]/)).toEqual('a-z]');
     // \w \d
     expect(validMatch(/\w/)).toBeTruthy();
     expect(validMatch(/./u)).toBeTruthy();
@@ -414,32 +434,55 @@ describe('Test regexp parser', () => {
   });
   // test extractSetAverage
   test('test average', () => {
-    const runTimes = 1e3;
-    let matchedTimes: number;
-    let i: number;
-    const run = (fn: () => boolean) => {
-      matchedTimes = 0;
-      for (i = 0; i < runTimes; i++) {
-        if (fn()) {
-          matchedTimes++;
-        }
-      }
-    };
     // r1
     const r1 = new RegexpParser(/[\Wa]/, {
       extractSetAverage: true,
     });
-    run(() => /\W/.test(r1.build()));
-    expect(matchedTimes > (runTimes * 2) / 3).toBeTruthy();
+    expect(run(() => /\W/.test(r1.build())) > (RUNTIMES * 2) / 3).toBeTruthy();
     // r2
     const r2 = new RegexpParser(/[\Wa]/);
-    run(() => /\W/.test(r2.build()));
-    expect(matchedTimes < (runTimes * 2) / 3).toBeTruthy();
+    expect(run(() => /\W/.test(r2.build())) < (RUNTIMES * 2) / 3).toBeTruthy();
     // r3
     const r3 = new RegexpParser(/[a-z,]/, {
       extractSetAverage: true,
     });
-    run(() => /[a-z]/.test(r3.build()));
-    expect(matchedTimes > (runTimes * 2) / 3).toBeTruthy();
+    expect(
+      run(() => /[a-z]/.test(r3.build())) > (RUNTIMES * 2) / 3,
+    ).toBeTruthy();
+  });
+  // test others
+  test('other conditions', () => {
+    //
+    expect(
+      run(() => /^.$/.test(CharsetHelper.make('.'))) === RUNTIMES,
+    ).toBeTruthy();
+    expect(
+      run(() =>
+        /^.$/s.test(
+          CharsetHelper.make('.', {
+            s: true,
+          }),
+        ),
+      ) === RUNTIMES,
+    ).toBeTruthy();
+    expect(
+      run(() =>
+        /^.$/u.test(
+          CharsetHelper.make('.', {
+            u: true,
+          }),
+        ),
+      ) === RUNTIMES,
+    ).toBeTruthy();
+    expect(
+      run(() =>
+        /^.$/su.test(
+          CharsetHelper.make('.', {
+            s: true,
+            u: true,
+          }),
+        ),
+      ) === RUNTIMES,
+    ).toBeTruthy();
   });
 });

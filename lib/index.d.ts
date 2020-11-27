@@ -24,6 +24,21 @@ export interface BuildConfData extends ParserConf {
 export declare type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'flags'> & {
     queues: RegexpPart[];
 };
+export declare class CharsetHelper {
+    static readonly points: CodePointData<CodePointRanges>;
+    static readonly lens: CodePointData<number[]>;
+    static readonly bigCharPoint: number[];
+    static readonly bigCharTotal: number;
+    static charsetOfAll(): CodePointResult;
+    static charsetOfDotall(): CodePointResult;
+    static charsetOfNegated(type: CharsetCacheType): CodePointResult;
+    static charsetOf(type: CharsetType): CodePointResult;
+    static getCharsetInfo(type: CharsetType | CharsetNegatedType | '.', flags?: FlagsHash): CodePointResult;
+    static make(type: CharsetType | CharsetNegatedType | '.', flags?: FlagsHash): string;
+    static makeOne(info: CodePointResult): string;
+    protected static readonly cache: CharsetCache;
+    protected constructor();
+}
 export declare const parserRule: RegExp;
 export declare const regexpRule: RegExp;
 export default class Parser {
@@ -41,7 +56,6 @@ export default class Parser {
     private hasLookaround;
     private hasNullRoot;
     constructor(rule: string | RegExp, config?: ParserConf);
-    setConfig(conf: ParserConf): void;
     build(): string | never;
     info(): Result;
     private parse;
@@ -99,7 +113,6 @@ export declare abstract class RegexpPart {
     build(conf: BuildConfData): string | never;
     untilEnd(_context: string): number | void;
     setDataConf(_conf: BuildConfData, _result: string): void;
-    toString(): string;
     isAncestorOf(target: RegexpPart): boolean;
     getRuleInput(_parseReference?: boolean): string;
     protected buildRuleInputFromQueues(): string;
@@ -221,7 +234,6 @@ export declare class RegexpSet extends RegexpPart {
     get parser(): Parser;
     get isComplete(): boolean;
     set isComplete(value: boolean);
-    isSetStart(): boolean;
     getRuleInput(): string;
     protected prebuild(conf: BuildConfData): string;
     protected makeCodePointResult(): void;
