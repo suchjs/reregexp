@@ -485,4 +485,14 @@ describe('Test regexp parser', () => {
       ) === RUNTIMES,
     ).toBeTruthy();
   });
+  //
+  test('test anchors and lookaround', () => {
+    expect(validValue(/^$/) === '').toBeTruthy();
+    expect(validValue(/^^^$/) === '').toBeTruthy();
+    expect(validValue(/$^/) === '').toBeTruthy();
+    expect(() => validMatch(/a^/)).toThrow();
+    expect(() => validMatch(/$a/)).toThrow();
+    expect(validValue(/^a$/) === 'a').toBeTruthy();
+    expect(mustIn(['a', 'b'], /^a|b$/)).toBeTruthy();
+  });
 });
