@@ -1416,78 +1416,73 @@ export class RegexpSet extends RegexpPart {
   protected makeCodePointResult(): void {
     if (!this.reverse || !this.parser || !this.isComplete) return;
     // with begin ^, reverse the sets
-    if (!this.codePointResult) {
-      const { queues, parser } = this;
-      const flags = parser.getFlagsHash();
-      if (
-        queues.length === 1 &&
-        queues[0].type === 'charset' &&
-        ['w', 's', 'd'].includes(
-          (queues[0] as RegexpCharset).charset.toLowerCase(),
-        )
-      ) {
-        const charCode =
-          (queues[0] as RegexpCharset).charset.charCodeAt(0) ^ 0b100000;
-        const charset = String.fromCharCode(charCode) as
-          | CharsetType
-          | CharsetNegatedType;
-        this.codePointResult = charH.getCharsetInfo(charset, flags);
-      } else {
-        const ranges = queues.reduce(
-          (res: CodePointRanges, item: RegexpPart) => {
-            const { type } = item;
-            let cur: CodePointRanges;
-            if (type === 'charset') {
-              const charset = (item as RegexpCharset).charset as CharsetAllType;
-              if (charset === 'b' || charset === 'B') {
-                // eslint-disable-next-line no-console
-                console.warn('the charset \\b or \\B will ignore');
-                cur = [];
-              } else {
-                cur = charH.getCharsetInfo(charset, flags).ranges.slice(0);
-              }
-            } else if (type === 'range') {
-              cur = [
-                (item as RegexpRange).queues.map((e: RegexpPart) => {
-                  return e.codePoint;
-                }),
-              ];
-            } else {
-              cur = [[item.codePoint]];
-            }
-            return res.concat(cur);
-          },
-          [],
-        );
-        ranges.push([0xd800, 0xdfff], flags.u ? [0x110000] : [0x10000]);
-        ranges.sort((a: number[], b: number[]) => {
-          return b[0] > a[0] ? -1 : b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1;
-        });
-        const negated = [];
-        let point = 0;
-        for (let i = 0, j = ranges.length; i < j; i++) {
-          const cur = ranges[i];
-          const [start] = cur;
-          const end = cur[1] || start;
-          if (point < start) {
-            negated.push(point + 1 === start ? [point] : [point, start - 1]);
+    const { queues, parser } = this;
+    const flags = parser.getFlagsHash();
+    if (
+      queues.length === 1 &&
+      queues[0].type === 'charset' &&
+      ['w', 's', 'd'].includes(
+        (queues[0] as RegexpCharset).charset.toLowerCase(),
+      )
+    ) {
+      const charCode =
+        (queues[0] as RegexpCharset).charset.charCodeAt(0) ^ 0b100000;
+      const charset = String.fromCharCode(charCode) as
+        | CharsetType
+        | CharsetNegatedType;
+      this.codePointResult = charH.getCharsetInfo(charset, flags);
+    } else {
+      const ranges = queues.reduce((res: CodePointRanges, item: RegexpPart) => {
+        const { type } = item;
+        let cur: CodePointRanges;
+        if (type === 'charset') {
+          const charset = (item as RegexpCharset).charset as CharsetAllType;
+          if (charset === 'b' || charset === 'B') {
+            // eslint-disable-next-line no-console
+            console.warn('the charset \\b or \\B will ignore');
+            cur = [];
+          } else {
+            cur = charH.getCharsetInfo(charset, flags).ranges.slice(0);
           }
-          point = Math.max(end + 1, point);
-        }
-        if (negated.length === 0) {
-          this.isMatchNothing = true;
+        } else if (type === 'range') {
+          cur = [
+            (item as RegexpRange).queues.map((e: RegexpPart) => {
+              return e.codePoint;
+            }),
+          ];
         } else {
-          let total = 0;
-          const totals = negated.map((item: number[]) => {
-            if (item.length === 1) {
-              total += 1;
-            } else {
-              total += item[1] - item[0] + 1;
-            }
-            return total;
-          });
-          this.codePointResult = { totals, ranges: negated };
+          cur = [[item.codePoint]];
         }
+        return res.concat(cur);
+      }, []);
+      ranges.push([0xd800, 0xdfff], flags.u ? [0x110000] : [0x10000]);
+      ranges.sort((a: number[], b: number[]) => {
+        return b[0] > a[0] ? -1 : b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1;
+      });
+      const negated = [];
+      let point = 0;
+      for (let i = 0, j = ranges.length; i < j; i++) {
+        const cur = ranges[i];
+        const [start] = cur;
+        const end = cur[1] || start;
+        if (point < start) {
+          negated.push(point + 1 === start ? [point] : [point, start - 1]);
+        }
+        point = Math.max(end + 1, point);
+      }
+      if (negated.length === 0) {
+        this.isMatchNothing = true;
+      } else {
+        let total = 0;
+        const totals = negated.map((item: number[]) => {
+          if (item.length === 1) {
+            total += 1;
+          } else {
+            total += item[1] - item[0] + 1;
+          }
+          return total;
+        });
+        this.codePointResult = { totals, ranges: negated };
       }
     }
   }

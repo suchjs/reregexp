@@ -69,6 +69,11 @@ describe('Test regexp parser', () => {
     expect(validParser('/a(?=b)/')).toBeTruthy();
     expect(validInput('/a(?=b)/')).toBeTruthy();
     expect(validParser('/(abc()()))/')).toThrow();
+    expect(validParser('/\\u{fg}/u')).toThrow();
+    expect(validParser('/\\xfg/u')).toThrow();
+    expect(validMatch(/\\ufg/)).toBeTruthy();
+    expect(validMatch(/\\xfg/)).toBeTruthy();
+    expect(validInput(/\xff\u{00aa}/u)).toBeTruthy();
   });
 
   // valid times
@@ -195,6 +200,8 @@ describe('Test regexp parser', () => {
     expect(validMatch(/\ca/u)).toBeTruthy();
     expect(validMatch(/\c1/)).toBeTruthy();
     expect(validParser('/\\u{110000}/u')).toThrow();
+    expect(run(() => validMatch(/[^a-z01\W]/u)) === RUNTIMES).toBeTruthy();
+    expect(validMatch(/[^a-z01\W]/)).toBeTruthy();
   });
   // test i flag
   test('test ignore case', () => {
@@ -223,6 +230,13 @@ describe('Test regexp parser', () => {
         },
       }),
     ).toThrow();
+    expect(
+      validValue(r2, {
+        namedGroupConf: {
+          ga: undefined,
+        },
+      }),
+    ).toEqual('aa');
     // special named group match
     const r3 = /(ef)(?<a_b_c_d>a|b|c|d+\1?)\\k<a_b_c_d>/;
     expect(
