@@ -49,6 +49,7 @@ const getRandomTotalIndex = (
 const getLastItem = <T>(arr: T[]) => {
   return arr[arr.length - 1];
 };
+
 // normal object
 export interface NormalObject<T = unknown> {
   [index: string]: T;
@@ -66,6 +67,7 @@ export interface ParserConf {
   maxRepeat?: number;
   namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
   extractSetAverage?: boolean;
+  capture?: boolean;
 }
 export interface BuildConfData extends ParserConf {
   flags: FlagsHash;
@@ -81,11 +83,15 @@ export type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'flags'> & {
 
 export class CharsetHelper {
   public static readonly points: CodePointData<CodePointRanges> = {
-    d: [[48, 57]], // character 0-9
-    w: [[48, 57], [65, 90], [95], [97, 122]], // 0-9, A-Z, _, a-z
-    // whitespaces, see the wiki below:
-    // https://en.wikipedia.org/wiki/Whitespace_character
-    // https://github.com/microsoft/ChakraCore/issues/2120  [0x18e0] not in \s
+    // 0-9
+    d: [[48, 57]],
+    // 0-9, A-Z, _, a-z
+    w: [[48, 57], [65, 90], [95], [97, 122]],
+    /**
+     * Whitespaces, see the wiki below:
+     * https://en.wikipedia.org/wiki/Whitespace_character
+     * https://github.com/microsoft/ChakraCore/issues/2120  [0x18e0] not in \s
+     */
     s: [
       [0x0009, 0x000d],
       [0x0020],
@@ -99,10 +105,14 @@ export class CharsetHelper {
       [0xfeff],
     ],
   };
-  // the total length of the code point ranges,should match the 'points' field.
+  // the count of the code point ranges
+  // should match the 'points' field.
   public static readonly lens: CodePointData<number[]> = {
+    // 0-9, total is 10
     d: [10],
+    // 0-9:10, A-Z:26 => 26+10, _: 1 => 26+10+1, a-z: 26 => 26+10+1+26
     w: [10, 36, 37, 63],
+    // 0x9-0xd: 5, 0x20: 1 => 5+1 ...see the 's' in static field 'points'
     s: [5, 6, 7, 8, 18, 20, 21, 22, 23, 24],
   };
   // big code point character
@@ -237,9 +247,6 @@ const symbols: NormalObject<string> = {
   matchAny: '.',
   groupBegin: '(',
   groupEnd: ')',
-  uncapture: '?:',
-  lookahead: '?=',
-  lookaheadNot: '?!',
   groupSplitor: '|',
   setBegin: '[',
   setEnd: ']',
@@ -283,6 +290,17 @@ export default class Parser {
   public readonly context: string = '';
   public readonly flags: Flag[] = [];
   public readonly lastRule: string = '';
+  // $0-$9, ugly writing way
+  public readonly $1?: string;
+  public readonly $2?: string;
+  public readonly $3?: string;
+  public readonly $4?: string;
+  public readonly $5?: string;
+  public readonly $6?: string;
+  public readonly $7?: string;
+  public readonly $8?: string;
+  public readonly $9?: string;
+  //
   private queues: RegexpPart[] = [];
   private ruleInput = '';
   private flagsHash: FlagsHash = {};
@@ -341,6 +359,13 @@ export default class Parser {
       });
       if (this.hasNullRoot) throw new Error(nullRootErr);
     }
+    if (this.config.capture) {
+      // if `capture` is setted, set the instance $1-$9 values and group values
+      // const { captureGroupData, namedGroupData } = conf;
+      // for (let i = 1; i <= 9; i++) {
+      //   this[`$${i}`] = captureGroupData[i] || '';
+      // }
+    }
     return result;
   }
   // get all info
@@ -367,7 +392,7 @@ export default class Parser {
     const namedCaptures: { [index: string]: RegexpGroup } = {};
     const refGroups: { [index: string]: RegexpGroup | null } = {};
     const captureRule = /^(\?(?:<(.+?)>|:))/;
-    const lookaroundRule = /^(\?(?:<=|<!|=|!))/;
+    const lookaroundRule = /^(\?(?:<?[=!]))/;
     const hasFlagU = this.hasFlag('u');
     const nestQueues: RegexpPart[] = [];
     const refOrNumbers: RegexpPart[] = [];
@@ -1199,7 +1224,7 @@ export class RegexpCharset extends RegexpPart {
     const { charset } = this;
     if (charset === 'b' || charset === 'B') {
       // eslint-disable-next-line no-console
-      console.warn('please do not use \\b or \\B');
+      console.warn('The  \\b or \\B');
       return '';
     } else {
       // make the charset
