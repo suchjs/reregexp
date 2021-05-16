@@ -55,6 +55,7 @@ export interface NormalObject<T = unknown> {
   [index: string]: T;
 }
 // regular expression flags
+export type $N = `$${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
 export type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's';
 export type FlagsHash = {
   [key in Flag]?: boolean;
@@ -73,11 +74,12 @@ export interface BuildConfData extends ParserConf {
   flags: FlagsHash;
   namedGroupData: NormalObject<string>;
   captureGroupData: NormalObject<string>;
-  beginWiths: string[];
-  endWiths: string[];
 }
 
-export type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'flags'> & {
+export type Result = Pick<
+  ReRegExp,
+  'rule' | 'lastRule' | 'context' | 'flags'
+> & {
   queues: RegexpPart[];
 };
 
@@ -279,28 +281,34 @@ export const regexpRule = new RegExp(
 );
 const regexpNoFlagsRule = new RegExp(`^${regexpRuleContext}$`);
 const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
+
 /**
  *
  *
  * @export
- * @class Parser
+ * @class
  */
-export default class Parser {
+export default class ReRegExp {
+  // static maxRepeat config
   public static maxRepeat = 5;
+  // regexp input, without flags
   public readonly context: string = '';
+  // flags
   public readonly flags: Flag[] = [];
+  // last rule, without named group
   public readonly lastRule: string = '';
-  // $0-$9, ugly writing way
-  public readonly $1?: string;
-  public readonly $2?: string;
-  public readonly $3?: string;
-  public readonly $4?: string;
-  public readonly $5?: string;
-  public readonly $6?: string;
-  public readonly $7?: string;
-  public readonly $8?: string;
-  public readonly $9?: string;
-  //
+  // capture data, named or unnamed group data
+  public groups?: NormalObject<string>;
+  public $1: string;
+  public $2: string;
+  public $3: string;
+  public $4: string;
+  public $5: string;
+  public $6: string;
+  public $7: string;
+  public $8: string;
+  public $9: string;
+  // private fields
   private queues: RegexpPart[] = [];
   private ruleInput = '';
   private flagsHash: FlagsHash = {};
@@ -342,8 +350,6 @@ export default class Parser {
       flags: this.flagsHash,
       namedGroupData: {},
       captureGroupData: {},
-      beginWiths: [],
-      endWiths: [],
     };
     const nullRootErr = 'the regexp has null expression, will match nothing';
     if (this.hasNullRoot === true) {
@@ -361,10 +367,15 @@ export default class Parser {
     }
     if (this.config.capture) {
       // if `capture` is setted, set the instance $1-$9 values and group values
-      // const { captureGroupData, namedGroupData } = conf;
-      // for (let i = 1; i <= 9; i++) {
-      //   this[`$${i}`] = captureGroupData[i] || '';
-      // }
+      const { captureGroupData, namedGroupData } = conf;
+      // group index data
+      for (let i = 1; i <= 9; i++) {
+        this[`$${i}` as $N] = captureGroupData[i] || '';
+      }
+      // named group data
+      if (Object.keys(namedGroupData).length > 0) {
+        this.groups = namedGroupData;
+      }
     }
     return result;
   }
@@ -438,7 +449,7 @@ export default class Parser {
     while (i < j) {
       // current character
       const char: string = context.charAt(i++);
-      // when in set,ignore these special chars
+      // when in set, ignore these special chars
       if (
         (curRange || curSet) &&
         [
@@ -635,9 +646,8 @@ export default class Parser {
         case s.groupEnd:
           if (nestQueues.length) {
             const curNest = nestQueues.pop();
-            const last = (curNest.type === 'group'
-              ? groups
-              : lookarounds
+            const last = (
+              curNest.type === 'group' ? groups : lookarounds
             ).pop();
             last.isComplete = true;
             special = new RegexpSpecial(`${curNest.type}End`);
@@ -962,7 +972,7 @@ export abstract class RegexpPart {
   public queues: RegexpPart[] = [];
   public codePoint = -1;
   public abstract readonly type: string;
-  protected parserInstance: Parser;
+  protected parserInstance: ReRegExp;
   protected min = 1;
   protected max = 1;
   protected dataConf: Partial<BuildConfData> = {};
@@ -972,10 +982,10 @@ export abstract class RegexpPart {
   protected completed = true;
   constructor(public input: string = '') {}
   // set/get the ref parser
-  get parser(): Parser {
+  get parser(): ReRegExp {
     return this.parserInstance;
   }
-  set parser(parser: Parser) {
+  set parser(parser: ReRegExp) {
     this.parserInstance = parser;
   }
   // get all possible count
@@ -1307,7 +1317,7 @@ export class RegexpRefOrNumber extends RegexpPart {
 
 export abstract class RegexpTimes extends RegexpPart {
   public readonly type = 'times';
-  protected readonly maxNum: number = Parser.maxRepeat;
+  protected readonly maxNum: number = ReRegExp.maxRepeat;
   protected greedy = true;
   protected abstract readonly rule: RegExp;
   protected minRepeat = 0;
@@ -1336,7 +1346,7 @@ export abstract class RegexpTimes extends RegexpPart {
 }
 
 export class RegexpTimesMulti extends RegexpTimes {
-  protected rule = /^(\{(\d+)(,|,(\d*))?}(\??))/;
+  protected rule = /^(\{(\d+)(,(\d*))?}(\??))/;
   public parse(): void {
     const { $2: min, $3: code, $4: max, $5: optional } = RegExp;
     this.greedy = optional !== '?';
@@ -1356,7 +1366,7 @@ export class RegexpTimesMulti extends RegexpTimes {
 
 export class RegexpTimesQuantifiers extends RegexpTimes {
   protected rule = /^(\*\?|\+\?|\?\?|\*|\+|\?)/;
-  constructor(protected readonly maxNum: number = Parser.maxRepeat) {
+  constructor(protected readonly maxNum: number = ReRegExp.maxRepeat) {
     super();
   }
   public parse(): void {
@@ -1388,11 +1398,11 @@ export class RegexpSet extends RegexpPart {
     this.buildForTimes = true;
   }
   // override set parser
-  set parser(parser: Parser) {
+  set parser(parser: ReRegExp) {
     this.parserInstance = parser;
     this.makeCodePointResult();
   }
-  get parser(): Parser {
+  get parser(): ReRegExp {
     return this.parserInstance;
   }
   //

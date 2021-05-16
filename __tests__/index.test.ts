@@ -1,9 +1,9 @@
-import RegexpParser, { ParserConf, CharsetHelper } from '../src/index';
+import ReRegExp, { ParserConf, CharsetHelper } from '../src/index';
 type Rule = RegExp | string;
 const validParser = (rule: Rule) => {
   return () => {
     try {
-      new RegexpParser(rule);
+      new ReRegExp(rule);
     } catch (e) {
       throw e;
     }
@@ -11,15 +11,15 @@ const validParser = (rule: Rule) => {
   };
 };
 const validMatch = (rule: RegExp) => {
-  return rule.test(new RegexpParser(rule).build());
+  return rule.test(new ReRegExp(rule).build());
 };
 const validValue = (rule: Rule, conf: ParserConf = {}) => {
-  const re = new RegexpParser(rule, conf);
+  const re = new ReRegExp(rule, conf);
   return re.build();
 };
 const validInput = (rule: Rule): boolean => {
   return (
-    new RegexpParser(rule).lastRule ===
+    new ReRegExp(rule).lastRule ===
     (rule instanceof RegExp
       ? rule.source
       : rule.replace(/^\//, '').replace(/\/[imguys]*$/, ''))
@@ -350,7 +350,7 @@ describe('Test regexp parser', () => {
     // with point
     expect(validMatch(/(^a|b$|c$)/)).toBeTruthy();
     // named group with conf
-    const v1 = new RegexpParser('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
+    const v1 = new ReRegExp('/a{1}b{2}(d{3})\\1(?<namecap>[a-z]{2})/', {
       namedGroupConf: {
         namecap: ['aa', 'bb'],
       },
@@ -418,7 +418,7 @@ describe('Test regexp parser', () => {
   });
   // test max repeat times
   test('test max repeat', () => {
-    RegexpParser.maxRepeat = 10;
+    ReRegExp.maxRepeat = 10;
     expect(
       Array.from({
         length: 10,
@@ -438,9 +438,33 @@ describe('Test regexp parser', () => {
       }),
     ).toBeTruthy();
   });
+  // test capture
+  test('test capture config', () => {
+    // use capture
+    const r1 = new ReRegExp(/(aa?)b(?<num>\d)/, {
+      capture: true,
+    });
+    for (let i = 0; i < 100; i++) {
+      const value = r1.build();
+      let index = 2;
+      if (value.startsWith('aa')) {
+        index = 3;
+        expect(r1.$1).toEqual('aa');
+      } else {
+        expect(r1.$1).toEqual('a');
+      }
+      expect(r1.groups).not.toBeUndefined();
+      expect(r1.groups.num).toEqual(value.charAt(index));
+    }
+    // no capture
+    const r2 = new ReRegExp(/(aa?)b(?<num>\d)/);
+    r2.build();
+    expect(r2.$1).toBeUndefined();
+    expect(r2.groups).toBeUndefined();
+  });
   // test last info
   test('test parser info', () => {
-    const r1 = new RegexpParser(/a(b(c))d/i);
+    const r1 = new ReRegExp(/a(b(c))d/i);
     const info = r1.info();
     expect(info.lastRule).toEqual('a(b(c))d');
     expect(info.flags.includes('i')).toBeTruthy();
@@ -449,15 +473,15 @@ describe('Test regexp parser', () => {
   // test extractSetAverage
   test('test average', () => {
     // r1
-    const r1 = new RegexpParser(/[\Wa]/, {
+    const r1 = new ReRegExp(/[\Wa]/, {
       extractSetAverage: true,
     });
     expect(run(() => /\W/.test(r1.build())) > (RUNTIMES * 2) / 3).toBeTruthy();
     // r2
-    const r2 = new RegexpParser(/[\Wa]/);
+    const r2 = new ReRegExp(/[\Wa]/);
     expect(run(() => /\W/.test(r2.build())) < (RUNTIMES * 2) / 3).toBeTruthy();
     // r3
-    const r3 = new RegexpParser(/[a-z,]/, {
+    const r3 = new ReRegExp(/[a-z,]/, {
       extractSetAverage: true,
     });
     expect(

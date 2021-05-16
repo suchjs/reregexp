@@ -1,16 +1,16 @@
 {
   "name": "reregexp",
-  "version": "1.3.4",
-  "description": "Generate a matched string with a given regular expression, useful for mocking strings.",
+  "version": "1.4.0",
+  "description": "Generate a random string match a given regular expression, useful for mocking strings.",
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",
   "author": "jxz_211@163.com",
   "keywords": [
     "regex",
     "regexp",
+    "random",
     "generate",
     "mock",
-    "random",
     "string",
     "toString",
     "reverse"
