@@ -306,7 +306,7 @@ export default class ReRegExp {
   // static maxRepeat config
   public static maxRepeat = 5;
   // static handle for unicode categories
-  public static unicodeCategoryGenerator?: UnicodeCategoryFactory;
+  public static unicodeCategoryFactory?: UnicodeCategoryFactory;
   // regexp input, without flags
   public readonly context: string = '';
   // flags
@@ -553,12 +553,12 @@ export default class ReRegExp {
             // unicode categories/script/block
             if (hasFlagU) {
               // must have `u` flag
-              if (typeof ReRegExp.unicodeCategoryGenerator !== 'function') {
+              if (typeof ReRegExp.unicodeCategoryFactory !== 'function') {
                 throw new Error(
-                  `You must set the handles how to validate the syntax of the unicode category.`,
+                  `You must set the ReRegExp.unicodeCategoryFactory before you use the unicode category.`,
                 );
               }
-              target = new RegexpUnicodeCategory();
+              target = new RegexpUnicodeCategory(next);
               const matchedNum: number = target.untilEnd(context.slice(i));
               if (matchedNum === 0) {
                 throw new Error(
@@ -1443,7 +1443,7 @@ export class RegexpSet extends RegexpPart {
   get parser(): ReRegExp {
     return this.parserInstance;
   }
-  //
+  // isComplete
   get isComplete(): boolean {
     return this.completed;
   }
@@ -1637,9 +1637,47 @@ export class RegexpASCII extends RegexpHexCode {
 
 export class RegexpUnicodeCategory extends RegexpPart {
   public type = 'unicode-category';
-  protected rule = /^([A-Z]|\{(?:([a-zA-z]+))?})/;
-  public untilEnd(_context: string): number {
+  protected data: UnicodeCategoryData;
+  protected rule = /^([A-Z]|\{(?:(?:([a-zA-Z_]+)=)?([A-Za-z_]+))})/;
+  protected generator: UnicodeCategoryInstance;
+  // constructor
+  public constructor(private readonly symbol: string) {
+    super();
+  }
+  // parse until matched
+  public untilEnd(context: string): number | never {
+    if (this.rule.test(context)) {
+      const { $1: all, $2: key, $3: value } = RegExp;
+      const { symbol } = this;
+      const reverse = symbol === 'P';
+      let data: UnicodeCategoryData;
+      if (value) {
+        data = {
+          short: false,
+          reverse,
+          value,
+        };
+        if (key) {
+          data.key = key;
+        }
+      } else {
+        data = {
+          short: true,
+          reverse,
+          value: all,
+        };
+      }
+      this.data = data;
+      const factory = ReRegExp.unicodeCategoryFactory;
+      this.generator = factory(data);
+      this.input = `\\${symbol}${all}`;
+      return all.length;
+    }
     return 0;
+  }
+  // generate a random character
+  protected prebuild(): string {
+    return this.generator.generate();
   }
 }
 

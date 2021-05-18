@@ -1,4 +1,8 @@
-import ReRegExp, { ParserConf, CharsetHelper } from '../src/index';
+import ReRegExp, {
+  ParserConf,
+  CharsetHelper,
+  UnicodeCategoryData,
+} from '../src/index';
 type Rule = RegExp | string;
 const validParser = (rule: Rule) => {
   return () => {
@@ -461,6 +465,54 @@ describe('Test regexp parser', () => {
     r2.build();
     expect(r2.$1).toBeUndefined();
     expect(r2.groups).toBeUndefined();
+  });
+  // test unicode category
+  test('test unicode category', () => {
+    // without u flag
+    const r1 = new ReRegExp('/\\p{Letter}{2}/');
+    expect(r1.build()).toEqual('p{Letter}}');
+    // with u flag, but no factory setted
+    expect(() => {
+      const _r2 = new ReRegExp('/\\p{Letter}{2}/u');
+    }).toThrowError();
+    // set the factory
+    expect(() => {
+      ReRegExp.unicodeCategoryFactory = function (data: UnicodeCategoryData) {
+        if (data.reverse) {
+          return {
+            generate() {
+              return '_';
+            },
+          };
+        }
+        if (data.value === 'Letter' || data.value === 'L') {
+          return {
+            generate() {
+              return 'a';
+            },
+          };
+        }
+        return {
+          generate() {
+            return '1';
+          },
+        };
+      };
+      // Letter
+      const r2 = new ReRegExp('/\\p{Letter}{2}/u');
+      expect(r2.build()).toEqual('aa');
+      // 'L' with short syntax
+      const r3 = new ReRegExp('/\\pLl{2}/u');
+      expect(r3.build()).toEqual('all');
+      // value is 'Ll', so should return '11'
+      const r4 = new ReRegExp('/\\p{Ll}{2}/u');
+      expect(r4.build()).toEqual('11');
+      // reverse
+      const r5 = new ReRegExp('/\\P{Letter}{2}/u');
+      expect(r5.build()).toEqual('__');
+      // delete the factory
+      delete ReRegExp.unicodeCategoryFactory;
+    }).not.toThrowError();
   });
   // test last info
   test('test parser info', () => {
