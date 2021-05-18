@@ -83,6 +83,21 @@ export type Result = Pick<
   queues: RegexpPart[];
 };
 
+export type UnicodeCategoryData = {
+  reverse: boolean;
+  short: boolean;
+  key?: string;
+  value?: string;
+};
+
+export type UnicodeCategoryFactory = (
+  data: UnicodeCategoryData,
+) => UnicodeCategoryInstance | never;
+
+export interface UnicodeCategoryInstance {
+  generate(): string;
+}
+
 export class CharsetHelper {
   public static readonly points: CodePointData<CodePointRanges> = {
     // 0-9
@@ -281,7 +296,6 @@ export const regexpRule = new RegExp(
 );
 const regexpNoFlagsRule = new RegExp(`^${regexpRuleContext}$`);
 const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
-
 /**
  *
  *
@@ -291,6 +305,8 @@ const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
 export default class ReRegExp {
   // static maxRepeat config
   public static maxRepeat = 5;
+  // static handle for unicode categories
+  public static unicodeCategoryGenerator?: UnicodeCategoryFactory;
   // regexp input, without flags
   public readonly context: string = '';
   // flags
@@ -532,6 +548,28 @@ export default class ReRegExp {
                 target = new RegexpChar('\\');
                 i--;
               }
+            }
+          } else if (next === 'p' || next === 'P') {
+            // unicode categories/script/block
+            if (hasFlagU) {
+              // must have `u` flag
+              if (typeof ReRegExp.unicodeCategoryGenerator !== 'function') {
+                throw new Error(
+                  `You must set the handles how to validate the syntax of the unicode category.`,
+                );
+              }
+              target = new RegexpUnicodeCategory();
+              const matchedNum: number = target.untilEnd(context.slice(i));
+              if (matchedNum === 0) {
+                throw new Error(
+                  `Invalid unicode category syntax at ${i}: \\${next}`,
+                );
+              } else {
+                i += matchedNum;
+              }
+            } else {
+              // take it as a translate `p` or `P`
+              target = new RegexpTranslateChar(`\\${next}`);
             }
           } else if (['d', 'D', 'w', 'W', 's', 'S', 'b', 'B'].includes(next)) {
             // charsets
@@ -1595,6 +1633,14 @@ export class RegexpUnicodeAll extends RegexpHexCode {
 export class RegexpASCII extends RegexpHexCode {
   protected rule = /^([0-9A-Fa-f]{2})/;
   protected codeType = 'x';
+}
+
+export class RegexpUnicodeCategory extends RegexpPart {
+  public type = 'unicode-category';
+  protected rule = /^([A-Z]|\{(?:([a-zA-z]+))?})/;
+  public untilEnd(_context: string): number {
+    return 0;
+  }
 }
 
 export class RegexpGroupItem extends RegexpPart {
