@@ -1,8 +1,4 @@
-import ReRegExp, {
-  ParserConf,
-  CharsetHelper,
-  UnicodeCategoryData,
-} from '../src/index';
+import ReRegExp, { ParserConf, CharsetHelper, UPCData } from '../src/index';
 type Rule = RegExp | string;
 const validParser = (rule: Rule) => {
   return () => {
@@ -477,8 +473,8 @@ describe('Test regexp parser', () => {
     }).toThrowError();
     // set the factory
     expect(() => {
-      ReRegExp.unicodeCategoryFactory = function (data: UnicodeCategoryData) {
-        if (data.reverse) {
+      ReRegExp.UPCFactory = function (data: UPCData) {
+        if (data.negate) {
           return {
             generate() {
               return '_';
@@ -511,7 +507,7 @@ describe('Test regexp parser', () => {
       const r5 = new ReRegExp('/\\P{Letter}{2}/u');
       expect(r5.build()).toEqual('__');
       // delete the factory
-      delete ReRegExp.unicodeCategoryFactory;
+      delete ReRegExp.UPCFactory;
     }).not.toThrowError();
   });
   // test last info

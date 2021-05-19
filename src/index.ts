@@ -83,18 +83,16 @@ export type Result = Pick<
   queues: RegexpPart[];
 };
 
-export type UnicodeCategoryData = {
-  reverse: boolean;
+export type UPCData = {
+  negate: boolean;
   short: boolean;
   key?: string;
-  value?: string;
+  value: string;
 };
 
-export type UnicodeCategoryFactory = (
-  data: UnicodeCategoryData,
-) => UnicodeCategoryInstance | never;
+export type UPCFactory = (data: UPCData) => UPCInstance | never;
 
-export interface UnicodeCategoryInstance {
+export interface UPCInstance {
   generate(): string;
 }
 
@@ -306,7 +304,7 @@ export default class ReRegExp {
   // static maxRepeat config
   public static maxRepeat = 5;
   // static handle for unicode categories
-  public static unicodeCategoryFactory?: UnicodeCategoryFactory;
+  public static UPCFactory?: UPCFactory;
   // regexp input, without flags
   public readonly context: string = '';
   // flags
@@ -553,9 +551,9 @@ export default class ReRegExp {
             // unicode categories/script/block
             if (hasFlagU) {
               // must have `u` flag
-              if (typeof ReRegExp.unicodeCategoryFactory !== 'function') {
+              if (typeof ReRegExp.UPCFactory !== 'function') {
                 throw new Error(
-                  `You must set the ReRegExp.unicodeCategoryFactory before you use the unicode category.`,
+                  `You must set the ReRegExp.UPCFactory before you use the unicode category.`,
                 );
               }
               target = new RegexpUnicodeCategory(next);
@@ -1637,9 +1635,9 @@ export class RegexpASCII extends RegexpHexCode {
 
 export class RegexpUnicodeCategory extends RegexpPart {
   public type = 'unicode-category';
-  protected data: UnicodeCategoryData;
+  protected data: UPCData;
   protected rule = /^([A-Z]|\{(?:(?:([a-zA-Z_]+)=)?([A-Za-z_]+))})/;
-  protected generator: UnicodeCategoryInstance;
+  protected generator: UPCInstance;
   // constructor
   public constructor(private readonly symbol: string) {
     super();
@@ -1649,12 +1647,12 @@ export class RegexpUnicodeCategory extends RegexpPart {
     if (this.rule.test(context)) {
       const { $1: all, $2: key, $3: value } = RegExp;
       const { symbol } = this;
-      const reverse = symbol === 'P';
-      let data: UnicodeCategoryData;
+      const negate = symbol === 'P';
+      let data: UPCData;
       if (value) {
         data = {
           short: false,
-          reverse,
+          negate,
           value,
         };
         if (key) {
@@ -1663,12 +1661,12 @@ export class RegexpUnicodeCategory extends RegexpPart {
       } else {
         data = {
           short: true,
-          reverse,
+          negate,
           value: all,
         };
       }
       this.data = data;
-      const factory = ReRegExp.unicodeCategoryFactory;
+      const factory = ReRegExp.UPCFactory;
       this.generator = factory(data);
       this.input = `\\${symbol}${all}`;
       return all.length;

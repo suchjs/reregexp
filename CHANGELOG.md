@@ -2,6 +2,12 @@
 
 The changelog of the reregexp library.
 
+## [1.5.0] - 2021-05-19
+
+### Added
+
+- Support unicode property class syntax, e.g. `\p{Letter}`, more details have shown in README.
+
 ## [1.4.0] - 2021-05-16
 
 ### Added

@@ -1,7 +1,7 @@
 {
   "name": "reregexp",
-  "version": "1.4.0",
-  "description": "Generate a random string match a given regular expression, useful for mocking strings.",
+  "version": "1.5.0",
+  "description": "Generate a random string match a given regular expression, suitable for mocking strings.",
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",
   "author": "jxz_211@163.com",
