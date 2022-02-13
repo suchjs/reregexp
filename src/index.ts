@@ -56,7 +56,7 @@ export interface NormalObject<T = unknown> {
 }
 // regular expression flags
 export type $N = `$${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
-export type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's';
+export type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's' | 'd';
 export type FlagsHash = {
   [key in Flag]?: boolean;
 };
@@ -64,11 +64,18 @@ export type FlagsBinary = {
   [key in Flag]: number;
 };
 export type NamedGroupConf<T = never> = NormalObject<string[] | T>;
+
+export interface FeaturesConfig {
+  unicode?: boolean;
+  namedCapture?: boolean;
+  upc?: boolean;
+}
 export interface ParserConf {
   maxRepeat?: number;
   namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
   extractSetAverage?: boolean;
   capture?: boolean;
+  features?: FeaturesConfig;
 }
 export interface BuildConfData extends ParserConf {
   flags: FlagsHash;
@@ -277,12 +284,13 @@ const symbols: NormalObject<string> = {
   delimiter: '/',
 };
 const flagsBinary: FlagsBinary = {
-  i: 0b000001,
-  u: 0b000010,
-  s: 0b000100,
-  g: 0b001000,
-  m: 0b010000,
-  y: 0b100000,
+  i: 0b0000001,
+  u: 0b0000010,
+  s: 0b0000100,
+  g: 0b0001000,
+  m: 0b0010000,
+  y: 0b0100000,
+  d: 0b1000000,
 };
 const flagItems = Object.keys(flagsBinary).join('');
 export const parserRule = new RegExp(
@@ -303,6 +311,12 @@ const octalRule = /^(0[0-7]{0,2}|[1-3][0-7]{0,2}|[4-7][0-7]?)/;
 export default class ReRegExp {
   // static maxRepeat config
   public static maxRepeat = 5;
+  // static features
+  public static features: FeaturesConfig = {
+    unicode: true,
+    namedCapture: true,
+    upc: true,
+  };
   // static handle for unicode categories
   public static UPCFactory?: UPCFactory;
   // regexp input, without flags
