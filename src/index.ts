@@ -50,6 +50,9 @@ const getLastItem = <T>(arr: T[]) => {
   return arr[arr.length - 1];
 };
 
+const SYMBOL_DOTALL = 'DOTALL';
+const SYMBOL_ALL = 'ALL';
+
 // normal object
 export interface NormalObject<T = unknown> {
   [index: string]: T;
@@ -74,6 +77,10 @@ export interface ParserConf {
   maxRepeat?: number;
   namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
   extractSetAverage?: boolean;
+  charactersOfAny?:
+    | CodePointRanges
+    | CodePointRangeItem
+    | ((flags?: FlagsHash) => string);
   capture?: boolean;
   features?: FeaturesConfig;
 }
@@ -138,15 +145,15 @@ export class CharsetHelper {
     s: [5, 6, 7, 8, 18, 20, 21, 22, 23, 24],
   };
   // big code point character
-  public static readonly bigCharPoint: number[] = [0x10000, 0x10ffff];
+  public static readonly bigCharPoint: [number, number] = [0x10000, 0x10ffff];
   public static readonly bigCharTotal: number = 0x10ffff - 0x10000 + 1;
   // match '.'
   public static charsetOfAll(): CodePointResult {
-    return CharsetHelper.charsetOfNegated('ALL');
+    return CharsetHelper.charsetOfNegated(SYMBOL_ALL);
   }
   // match '.' with s flag
   public static charsetOfDotall(): CodePointResult {
-    return CharsetHelper.charsetOfNegated('DOTALL');
+    return CharsetHelper.charsetOfNegated(SYMBOL_DOTALL);
   }
   // get negated charset
   public static charsetOfNegated(type: CharsetCacheType): CodePointResult {
@@ -171,13 +178,13 @@ export class CharsetHelper {
         total += num;
         totals.push(total);
       };
-      if (type === 'DOTALL') {
+      if (type === SYMBOL_DOTALL) {
         add(start, max);
         add(nextStart, nextMax);
       } else {
         // should exclude
         const excepts =
-          type === 'ALL'
+          type === SYMBOL_ALL
             ? [[0x000a], [0x000d], [0x2028, 0x2029]]
             : points[type.toLowerCase() as CharsetType];
         const isNegaWhitespace = type === 'S';
@@ -250,8 +257,8 @@ export class CharsetHelper {
     return CharsetHelper.makeOne(CharsetHelper.getCharsetInfo(type, flags));
   }
   // make one character
-  public static makeOne(info: CodePointResult): string {
-    const { totals, ranges } = info;
+  public static makeOne(result: CodePointResult): string {
+    const { totals, ranges } = result;
     const { rand, index } = getRandomTotalIndex(totals);
     const codePoint = ranges[index][0] + (rand - (totals[index - 1] || 0)) - 1;
     return String.fromCodePoint(codePoint);
@@ -319,6 +326,8 @@ export default class ReRegExp {
   };
   // static handle for unicode categories
   public static UPCFactory?: UPCFactory;
+  // diy RegexpAny characters
+  public static charactersOfAny: ParserConf['charactersOfAny'];
   // regexp input, without flags
   public readonly context: string = '';
   // flags
@@ -344,6 +353,10 @@ export default class ReRegExp {
   private rootQueues: RegexpPart[] = [];
   private hasLookaround = false;
   private hasNullRoot: boolean = null;
+  // any character handle
+  private anyCharacterHandle: () => string;
+  private anyCharacterHandleDone = false;
+  // constructor
   constructor(
     public readonly rule: string | RegExp,
     private config: ParserConf = {},
@@ -472,6 +485,18 @@ export default class ReRegExp {
         denyTypes.includes(type) ||
         (type === 'charset' && prev.charset.toLowerCase() === 'b')
       );
+    };
+    // any character handle
+    const genAnyCharacterHandle = () => {
+      return this.anyCharacterHandleDone
+        ? this.anyCharacterHandle
+        : (() => {
+            this.anyCharacterHandleDone = true;
+            return (this.anyCharacterHandle = RegexpAny.genDiyCharactersHandle({
+              ...this.config,
+              flags: this.flagsHash,
+            }));
+          })();
     };
     // /()/
     while (i < j) {
@@ -813,7 +838,7 @@ export default class ReRegExp {
           break;
         // match any .
         case s.matchAny:
-          target = new RegexpAny();
+          target = new RegexpAny(genAnyCharacterHandle());
           break;
         // match ^$
         case s.beginWith:
@@ -993,11 +1018,15 @@ export type CharsetType = 'd' | 'w' | 's';
 export type CharsetNegatedType = 'D' | 'W' | 'S';
 export type CharsetWordType = 'b' | 'B';
 export type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
-export type CharsetCacheType = CharsetNegatedType | 'DOTALL' | 'ALL';
+export type CharsetCacheType =
+  | CharsetNegatedType
+  | typeof SYMBOL_DOTALL
+  | typeof SYMBOL_ALL;
 export type CharsetCache = {
   [key in CharsetCacheType]?: CodePointResult;
 };
-export type CodePointRanges = number[][];
+export type CodePointRangeItem = [number, number] | [number];
+export type CodePointRanges = Array<CodePointRangeItem>;
 export type CodePointData<T> = {
   [key in CharsetType]: T;
 };
@@ -1228,12 +1257,47 @@ export class RegexpLookaround extends RegexpEmpty {
 
 export class RegexpAny extends RegexpPart {
   public readonly type = 'any';
-  constructor() {
+  constructor(public handle?: () => string) {
     super('.');
     this.buildForTimes = true;
   }
+  // generate build handle
+  public static genDiyCharactersHandle(
+    conf: ParserConf & { flags: FlagsHash },
+  ): () => string {
+    const charactersOfAny = conf.charactersOfAny || ReRegExp.charactersOfAny;
+    if (Array.isArray(charactersOfAny)) {
+      if (charactersOfAny.length === 0) {
+        throw new Error(
+          "The user defined 'charactersOfAny' should not be an empty range array.",
+        );
+      }
+      let allCharacters: CodePointRanges;
+      if (!Array.isArray(charactersOfAny[0])) {
+        allCharacters = [charactersOfAny as CodePointRangeItem];
+      } else {
+        allCharacters = charactersOfAny as CodePointRanges;
+      }
+      const totals: number[] = [];
+      let total = 0;
+      for (const [start, end = start] of allCharacters) {
+        total += end - start + 1;
+        totals.push(total);
+      }
+      const result: CodePointResult = {
+        ranges: allCharacters,
+        totals,
+      };
+      return () => charH.makeOne(result);
+    } else if (typeof charactersOfAny === 'function') {
+      return () =>
+        (charactersOfAny as (flags?: FlagsHash) => string)(conf.flags);
+    }
+  }
+  // prebuild
   protected prebuild(conf: BuildConfData): string {
-    return charH.make('.', conf.flags);
+    const handle = this.handle || (() => charH.make('.', conf.flags));
+    return handle();
   }
 }
 
@@ -1533,7 +1597,7 @@ export class RegexpSet extends RegexpPart {
           cur = [
             (item as RegexpRange).queues.map((e: RegexpPart) => {
               return e.codePoint;
-            }),
+            }) as CodePointRangeItem,
           ];
         } else {
           cur = [[item.codePoint]];
@@ -1544,7 +1608,7 @@ export class RegexpSet extends RegexpPart {
       ranges.sort((a: number[], b: number[]) => {
         return b[0] > a[0] ? -1 : b[0] === a[0] ? (b[1] > a[1] ? 1 : -1) : 1;
       });
-      const negated = [];
+      const negated: CodePointRanges = [];
       let point = 0;
       for (let i = 0, j = ranges.length; i < j; i++) {
         const cur = ranges[i];

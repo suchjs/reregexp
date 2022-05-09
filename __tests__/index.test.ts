@@ -571,4 +571,74 @@ describe('Test regexp parser', () => {
       ) === RUNTIMES,
     ).toBeTruthy();
   });
+  // test diy any characters
+  test('diy any chacaters', () => {
+    // error character ranges
+    expect(
+      () =>
+        new ReRegExp('.', {
+          charactersOfAny: [],
+        }),
+    ).toThrow();
+    // global config
+    ReRegExp.charactersOfAny = () => '.';
+    const re = new ReRegExp('.');
+    for (let i = 0; i < 100; i++) {
+      expect(re.build() === '.').toBeTruthy();
+    }
+    ReRegExp.charactersOfAny = undefined;
+    // use charset helper characters
+    const re0 = new ReRegExp('.', {
+      charactersOfAny: CharsetHelper.points.d,
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(/^\w$/.test(re0.build())).toBeTruthy();
+    }
+    // normal array
+    const re1 = new ReRegExp('.', {
+      charactersOfAny: [97],
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(re1.build() === 'a').toBeTruthy();
+    }
+    // normal array
+    const re2 = new ReRegExp('.', {
+      charactersOfAny: [97, 98],
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(['a', 'b'].includes(re2.build())).toBeTruthy();
+    }
+    // normal array
+    const re3 = new ReRegExp('.', {
+      charactersOfAny: [[97, 98]],
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(['a', 'b'].includes(re3.build())).toBeTruthy();
+    }
+    // normal array
+    const re4 = new ReRegExp('..', {
+      charactersOfAny: [[97, 98], [99]],
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(
+        ['aa', 'ab', 'ac', 'ba', 'bb', 'bc', 'ca', 'cb', 'cc'].includes(
+          re4.build(),
+        ),
+      ).toBeTruthy();
+    }
+    // function
+    const re5 = new ReRegExp('/./', {
+      charactersOfAny: () => 'a',
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(re5.build() === 'a').toBeTruthy();
+    }
+    // function
+    const re6 = new ReRegExp('/./s', {
+      charactersOfAny: (flags) => (flags.s ? 'b' : 'a'),
+    });
+    for (let i = 0; i < 100; i++) {
+      expect(re6.build() === 'b').toBeTruthy();
+    }
+  });
 });
