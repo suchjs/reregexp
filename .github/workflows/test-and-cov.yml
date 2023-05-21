@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: npm install -g pnpm@8 && pnpm i
       - name: Run tests
-        run: pnpm test && pnpm run coverage
+        run: pnpm test
       - name: Run coverage
         uses: coverallsapp/github-action@v2
         with:

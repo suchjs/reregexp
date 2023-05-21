@@ -48,7 +48,6 @@
     "local": "ts-node -r tsconfig-paths/register local/test.ts",
     "build:browser": "webpack --progress --mode='production'",
     "build": "npm run lint && tsc && npm run build:browser",
-    "coverage": "jest --coverage && coveralls < coverage/lcov.info",
     "prepublish": "npm test && npm run build",
     "lint": "eslint 'src/**/*.{ts,js}'"
   },
