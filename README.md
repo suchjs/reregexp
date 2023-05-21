@@ -27,13 +27,21 @@ yarn add reregexp
 ## Usage
 
 ```javascript
+// Commonjs module
 const ReRegExp = require('reregexp').default;
 
-// You can use either a regex literal
-// or a RegExp string
-// if you need use regex rules the browser not supported yet
-// such as named group, you need choose a RegExp string
-// for the first constructor parameter.
+// ESM module
+// since v1.6.1
+import ReRegExp from 'reregexp';
+
+// before v1.6.1
+import re from 'reregexp';
+const ReRegExp = re.default;
+
+// For the first parameter of the constructor
+// You can use a regex literal or a RegExp string
+// if you need use some features that are not well supported by all browsers
+// such as a named group, you should always choose a RegExp string
 
 // Example 1:  use group reference
 const r1 = new ReRegExp(/([a-z0-9]{3})_\1/);

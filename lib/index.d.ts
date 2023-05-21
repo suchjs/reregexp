@@ -1,33 +1,52 @@
+declare const SYMBOL_DOTALL = "DOTALL";
+declare const SYMBOL_ALL = "ALL";
 export interface NormalObject<T = unknown> {
     [index: string]: T;
 }
-export declare type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's';
-export declare type FlagsHash = {
+export type $N = `$${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
+export type Flag = 'i' | 'm' | 'g' | 'u' | 'y' | 's' | 'd';
+export type FlagsHash = {
     [key in Flag]?: boolean;
 };
-export declare type FlagsBinary = {
+export type FlagsBinary = {
     [key in Flag]: number;
 };
-export declare type NamedGroupConf<T = never> = NormalObject<string[] | T>;
+export type NamedGroupConf<T = never> = NormalObject<string[] | T>;
+export interface FeaturesConfig {
+    unicode?: boolean;
+    namedCapture?: boolean;
+    upc?: boolean;
+}
 export interface ParserConf {
     maxRepeat?: number;
     namedGroupConf?: NamedGroupConf<NamedGroupConf<string[] | boolean>>;
     extractSetAverage?: boolean;
+    charactersOfAny?: CodePointRanges | CodePointRangeItem | ((flags?: FlagsHash) => string);
+    capture?: boolean;
+    features?: FeaturesConfig;
 }
 export interface BuildConfData extends ParserConf {
     flags: FlagsHash;
     namedGroupData: NormalObject<string>;
     captureGroupData: NormalObject<string>;
-    beginWiths: string[];
-    endWiths: string[];
 }
-export declare type Result = Pick<Parser, 'rule' | 'lastRule' | 'context' | 'flags'> & {
+export type Result = Pick<ReRegExp, 'rule' | 'lastRule' | 'context' | 'flags'> & {
     queues: RegexpPart[];
 };
+export type UPCData = {
+    negate: boolean;
+    short: boolean;
+    key?: string;
+    value: string;
+};
+export type UPCFactory = (data: UPCData) => UPCInstance | never;
+export interface UPCInstance {
+    generate(): string;
+}
 export declare class CharsetHelper {
     static readonly points: CodePointData<CodePointRanges>;
     static readonly lens: CodePointData<number[]>;
-    static readonly bigCharPoint: number[];
+    static readonly bigCharPoint: [number, number];
     static readonly bigCharTotal: number;
     static charsetOfAll(): CodePointResult;
     static charsetOfDotall(): CodePointResult;
@@ -35,19 +54,32 @@ export declare class CharsetHelper {
     static charsetOf(type: CharsetType): CodePointResult;
     static getCharsetInfo(type: CharsetType | CharsetNegatedType | '.', flags?: FlagsHash): CodePointResult;
     static make(type: CharsetType | CharsetNegatedType | '.', flags?: FlagsHash): string;
-    static makeOne(info: CodePointResult): string;
+    static makeOne(result: CodePointResult): string;
     protected static readonly cache: CharsetCache;
     protected constructor();
 }
 export declare const parserRule: RegExp;
 export declare const regexpRule: RegExp;
-export default class Parser {
+export default class ReRegExp {
     readonly rule: string | RegExp;
     private config;
     static maxRepeat: number;
+    static features: FeaturesConfig;
+    static UPCFactory?: UPCFactory;
+    static charactersOfAny: ParserConf['charactersOfAny'];
     readonly context: string;
     readonly flags: Flag[];
     readonly lastRule: string;
+    groups?: NormalObject<string>;
+    $1: string;
+    $2: string;
+    $3: string;
+    $4: string;
+    $5: string;
+    $6: string;
+    $7: string;
+    $8: string;
+    $9: string;
     private queues;
     private ruleInput;
     private flagsHash;
@@ -55,6 +87,8 @@ export default class Parser {
     private rootQueues;
     private hasLookaround;
     private hasNullRoot;
+    private anyCharacterHandle;
+    private anyCharacterHandleDone;
     constructor(rule: string | RegExp, config?: ParserConf);
     build(): string | never;
     info(): Result;
@@ -63,16 +97,17 @@ export default class Parser {
     private hasFlag;
     getFlagsHash(): FlagsHash;
 }
-export declare type CharsetType = 'd' | 'w' | 's';
-export declare type CharsetNegatedType = 'D' | 'W' | 'S';
-export declare type CharsetWordType = 'b' | 'B';
-export declare type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
-export declare type CharsetCacheType = CharsetNegatedType | 'DOTALL' | 'ALL';
-export declare type CharsetCache = {
+export type CharsetType = 'd' | 'w' | 's';
+export type CharsetNegatedType = 'D' | 'W' | 'S';
+export type CharsetWordType = 'b' | 'B';
+export type CharsetAllType = CharsetType | CharsetNegatedType | CharsetWordType;
+export type CharsetCacheType = CharsetNegatedType | typeof SYMBOL_DOTALL | typeof SYMBOL_ALL;
+export type CharsetCache = {
     [key in CharsetCacheType]?: CodePointResult;
 };
-export declare type CodePointRanges = number[][];
-export declare type CodePointData<T> = {
+export type CodePointRangeItem = [number, number] | [number];
+export type CodePointRanges = Array<CodePointRangeItem>;
+export type CodePointData<T> = {
     [key in CharsetType]: T;
 };
 export interface CodePointResult {
@@ -88,7 +123,7 @@ export declare abstract class RegexpPart {
     queues: RegexpPart[];
     codePoint: number;
     abstract readonly type: string;
-    protected parserInstance: Parser;
+    protected parserInstance: ReRegExp;
     protected min: number;
     protected max: number;
     protected dataConf: Partial<BuildConfData>;
@@ -97,8 +132,8 @@ export declare abstract class RegexpPart {
     protected matchNothing: boolean;
     protected completed: boolean;
     constructor(input?: string);
-    get parser(): Parser;
-    set parser(parser: Parser);
+    get parser(): ReRegExp;
+    set parser(parser: ReRegExp);
     get count(): number;
     get parent(): RegexpPart;
     set parent(value: RegexpPart);
@@ -145,8 +180,12 @@ export declare class RegexpLookaround extends RegexpEmpty {
     getRuleInput(): string;
 }
 export declare class RegexpAny extends RegexpPart {
+    handle?: () => string;
     readonly type = "any";
-    constructor();
+    constructor(handle?: () => string);
+    static genDiyCharactersHandle(conf: ParserConf & {
+        flags: FlagsHash;
+    }): () => string;
     protected prebuild(conf: BuildConfData): string;
 }
 export declare class RegexpNull extends RegexpPart {
@@ -230,8 +269,8 @@ export declare class RegexpSet extends RegexpPart {
     private isMatchAnything;
     private codePointResult;
     constructor();
-    set parser(parser: Parser);
-    get parser(): Parser;
+    set parser(parser: ReRegExp);
+    get parser(): ReRegExp;
     get isComplete(): boolean;
     set isComplete(value: boolean);
     getRuleInput(): string;
@@ -264,6 +303,16 @@ export declare class RegexpASCII extends RegexpHexCode {
     protected rule: RegExp;
     protected codeType: string;
 }
+export declare class RegexpUnicodeCategory extends RegexpPart {
+    private readonly symbol;
+    type: string;
+    protected data: UPCData;
+    protected rule: RegExp;
+    protected generator: UPCInstance;
+    constructor(symbol: string);
+    untilEnd(context: string): number | never;
+    protected prebuild(): string;
+}
 export declare class RegexpGroupItem extends RegexpPart {
     index: number;
     readonly type = "group-item";
@@ -290,3 +339,4 @@ export declare class RegexpGroup extends RegexpPart {
     protected buildRule(flags: FlagsHash): RegExp | null;
     protected prebuild(conf: BuildConfData): string;
 }
+export {};
