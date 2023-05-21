@@ -21,9 +21,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
-        run: npm i
+        run: npm install -g pnpm@8 && pnpm i
       - name: Run tests
-        run: npm test && npm run coverage
+        run: pnpm test && pnpm run coverage
       - name: Run coverage
         uses: coverallsapp/github-action@v2
         with:
