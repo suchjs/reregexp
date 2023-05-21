@@ -23,6 +23,8 @@ jobs:
       - name: Install dependencies
         run: npm i
       - name: Run tests
-        run: npm test
+        run: npm test && npm run coverage
       - name: Run coverage
-        run: npm run coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
