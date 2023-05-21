@@ -32,7 +32,7 @@ devDependencies:
     specifier: ^3.1.4
     version: 3.1.4(eslint@7.32.0)(prettier@2.8.8)
   husky:
-    specifier: ^8.0.3
+    specifier: ^8.0.0
     version: 8.0.3
   jest:
     specifier: ^26.6.3
