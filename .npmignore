@@ -28,3 +28,6 @@ jest.config.js
 
 # husky
 .husky/
+
+# git action
+.github/
